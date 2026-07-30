@@ -210,6 +210,7 @@
     chat:      { label:"Chat & Support",                color:"#1E8E5A", tint:"#E3F5EB" },
     cdp:       { label:"CDP & Automation",              color:"#7A7A1E", tint:"#F4F4DC" },
     leadintel: { label:"Visitor ID (B2B)",              color:"#A6329C", tint:"#F5E3F3" },
+    review:    { label:"Needs Review",                  color:"#A8791A", tint:"#F7EFDD" },
     other:     { label:"Other tracking domain",         color:"#6B7280", tint:"#EEF0F1" },
     platform:  { label:"Platform / hosting (not a tag)",color:"#8A7F73", tint:"#EFEBE6" }
   };
@@ -399,7 +400,12 @@
     { key:"activecamp", name:"ActiveCampaign", cat:"cdp", mark:"AC",
       patterns:[re("trackcmp\\.net")],
       description:"Email marketing and marketing-automation platform tracking code, used to trigger automations based on site behavior.",
-      snippet:"<script type=\"text/javascript\">\n(function(e,t,o,n,p,r,i){e.visitorGlobalObjectAlias=n;e[e.visitorGlobalObjectAlias]=e[e.visitorGlobalObjectAlias]||function(){\n(e[e.visitorGlobalObjectAlias].q=e[e.visitorGlobalObjectAlias].q||[]).push(arguments)};\ne[e.visitorGlobalObjectAlias].l=(new Date).getTime();\nr=t.createElement(\"script\"),i=t.getElementsByTagName(\"script\")[0];\nr.async=!0,r.src=o;i.parentNode.insertBefore(r,i)\n})(window,document,\"https://diffuser-cdn.app-us1.com/diffuser/diffuser.js\",\"vgo\");\nvgo('setAccount', 'YOUR_ACCOUNT_ID');\nvgo('setTrackByDefault', true);\nvgo('process');\n</" + "script>" }
+      snippet:"<script type=\"text/javascript\">\n(function(e,t,o,n,p,r,i){e.visitorGlobalObjectAlias=n;e[e.visitorGlobalObjectAlias]=e[e.visitorGlobalObjectAlias]||function(){\n(e[e.visitorGlobalObjectAlias].q=e[e.visitorGlobalObjectAlias].q||[]).push(arguments)};\ne[e.visitorGlobalObjectAlias].l=(new Date).getTime();\nr=t.createElement(\"script\"),i=t.getElementsByTagName(\"script\")[0];\nr.async=!0,r.src=o;i.parentNode.insertBefore(r,i)\n})(window,document,\"https://diffuser-cdn.app-us1.com/diffuser/diffuser.js\",\"vgo\");\nvgo('setAccount', 'YOUR_ACCOUNT_ID');\nvgo('setTrackByDefault', true);\nvgo('process');\n</" + "script>" },
+
+    { key:"sentry", name:"Sentry (Error Monitoring)", cat:"review", mark:"SNT",
+      patterns:[re("browser\\.sentry-cdn\\.com"), re("js\\.sentry-cdn\\.com"), re("Sentry\\.init\\("), re("https?:\\/\\/([a-f0-9]{16,32})@o\\d+\\.ingest\\.(?:[a-z]+\\.)?sentry\\.io")],
+      description:"Not a marketing tool — Sentry captures JavaScript errors and performance data for developers. It shows up either because someone deliberately added error monitoring for the site's custom code, OR because the site's builder/platform (e.g. Wix) bundles its own internal Sentry instance to monitor its own platform code — Tag Trace can't always tell which from static HTML alone. Check the snippet below and decide whether it's worth keeping in your report.",
+      snippet:"<script src=\"https://js.sentry-cdn.com/YOUR_PUBLIC_KEY.min.js\" crossorigin=\"anonymous\"></" + "script>\n<script>\n  Sentry.init({ dsn: \"https://YOUR_PUBLIC_KEY@oYOUR_ORG_ID.ingest.sentry.io/YOUR_PROJECT_ID\" });\n</" + "script>" }
   ];
 
   var VENDOR_BY_KEY = {};
