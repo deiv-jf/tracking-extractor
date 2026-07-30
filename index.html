@@ -843,6 +843,20 @@
     urlStatus.textContent = msg;
   }
 
+  function applyFetchedHtml(html, url, mode){
+    input.value = html;
+    updateCount();
+    runScan();
+    setUrlStatus("Fetched " + html.length.toLocaleString() + " characters from " + url + " (" + mode + ").", "info");
+  }
+
+  function fetchViaProxy(url){
+    return fetch("/fetch-proxy?url=" + encodeURIComponent(url)).then(function(res){
+      if (!res.ok) throw new Error("proxy status " + res.status);
+      return res.text();
+    }).then(function(html){ applyFetchedHtml(html, url, "via local proxy"); });
+  }
+
   function fetchAndScan(){
     var url = urlInput.value.trim();
     if (!url) return;
@@ -858,16 +872,16 @@
       if (!res.ok) throw new Error("Server responded with " + res.status);
       return res.text();
     }).then(function(html){
-      input.value = html;
-      updateCount();
-      runScan();
-      setUrlStatus("Fetched " + html.length.toLocaleString() + " characters from " + url + ".", "info");
+      applyFetchedHtml(html, url, "direct");
     }).catch(function(){
-      setUrlStatus(
-        "Couldn't fetch that URL directly — most sites block cross-origin requests from the browser (CORS), and this sandbox blocks external network calls too. " +
-        "Instead: open the page, right-click → \"View Page Source\" (or Ctrl/Cmd+U), select all, copy, and paste it into the box below.",
-        "error"
-      );
+      return fetchViaProxy(url).catch(function(){
+        setUrlStatus(
+          "Couldn't fetch that URL — the site blocks cross-origin browser requests (CORS). " +
+          "Run this tool with \"node server.js\" instead of opening index.html directly — that adds a local proxy that bypasses CORS for most sites. " +
+          "Or paste the HTML manually: open the page, right-click → \"View Page Source\" (Ctrl/Cmd+U), select all, copy, and paste it below.",
+          "error"
+        );
+      });
     }).finally(function(){
       fetchBtn.disabled = false;
       fetchBtn.textContent = "Fetch & Scan";
