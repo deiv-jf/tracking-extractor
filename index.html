@@ -1,0 +1,1096 @@
+<meta charset="UTF-8">
+<title>Tag Trace — Tracking Code Extractor</title>
+<style>
+  :root{
+    --bg:#EEF1F2; --surface:#FFFFFF; --surface-2:#F6F8F8;
+    --ink:#14191F; --ink-soft:#55606B; --ink-faint:#8993A0;
+    --line:#DCE2E6; --line-soft:#E8ECEE;
+    --accent:#0E7A82; --accent-dark:#0A5D63; --accent-tint:#E3F2F1;
+    --warn:#B23A2E; --warn-tint:#FDEBEA;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Menlo, Consolas, monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{background:var(--bg); color:var(--ink); font-family:var(--sans); -webkit-font-smoothing:antialiased; min-height:100vh;}
+  ::selection{background:var(--accent-tint); color:var(--accent-dark);}
+  button, input{font-family:inherit;}
+  :focus-visible{outline:2px solid var(--accent); outline-offset:2px;}
+
+  .wrap{max-width:1280px; margin:0 auto; padding:36px 28px 64px; display:flex; flex-direction:column; gap:22px;}
+
+  header{display:flex; flex-direction:column; gap:6px;}
+  .eyebrow{font-family:var(--mono); font-size:11.5px; font-weight:600; letter-spacing:.14em; text-transform:uppercase; color:var(--accent-dark);}
+  h1{font-size:28px; font-weight:800; letter-spacing:-0.02em; margin:0; text-wrap:balance;}
+  header p{margin:0; color:var(--ink-soft); font-size:14.5px; max-width:66ch; line-height:1.5;}
+
+  .tabs{display:flex; gap:4px; background:var(--surface-2); padding:4px; border-radius:10px; width:fit-content; border:1px solid var(--line);}
+  .tab-btn{border:none; background:transparent; padding:8px 16px; border-radius:7px; font-size:13px; font-weight:700; color:var(--ink-soft); cursor:pointer;}
+  .tab-btn[data-active="true"]{background:var(--surface); color:var(--ink); box-shadow:0 1px 2px rgba(20,25,31,.1);}
+
+  .board{display:grid; grid-template-columns:minmax(320px,420px) 1fr; gap:20px; align-items:start;}
+  @media (max-width:860px){.board{grid-template-columns:1fr;}}
+
+  .panel{background:var(--surface); border:1px solid var(--line); border-radius:14px; overflow:hidden;}
+  .panel-head{display:flex; align-items:center; justify-content:space-between; padding:14px 18px; border-bottom:1px solid var(--line-soft);}
+  .panel-title{font-size:12.5px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:var(--ink-soft);}
+  .panel-body{padding:16px 18px 18px;}
+
+  textarea{width:100%; min-height:360px; resize:vertical; border:1px solid var(--line); border-radius:10px; background:var(--surface-2); color:var(--ink); font-family:var(--mono); font-size:12.5px; line-height:1.55; padding:12px 13px;}
+  textarea::placeholder{color:var(--ink-faint);}
+
+  .toolbar{display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:12px;}
+  .toolbar-left{display:flex; gap:8px; flex-wrap:wrap;}
+
+  .btn{border:1px solid var(--line); background:var(--surface); color:var(--ink); padding:8px 14px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; transition:background .12s ease, border-color .12s ease, transform .05s ease;}
+  .btn:hover{border-color:var(--ink-faint);}
+  .btn:active{transform:translateY(1px);}
+  .btn-primary{background:var(--accent); border-color:var(--accent); color:#fff;}
+  .btn-primary:hover{background:var(--accent-dark); border-color:var(--accent-dark);}
+  .btn-ghost{background:transparent;}
+  .btn-sm{padding:5px 10px; font-size:12px; border-radius:7px;}
+
+  .count{font-family:var(--mono); font-size:11.5px; color:var(--ink-faint); font-variant-numeric:tabular-nums; white-space:nowrap;}
+
+  .privacy-note{margin-top:12px; font-size:12px; color:var(--ink-faint); display:flex; align-items:center; gap:6px;}
+  .privacy-dot{width:6px; height:6px; border-radius:50%; background:var(--accent); flex:none;}
+
+  .url-row{display:flex; gap:8px; margin-bottom:10px;}
+  .url-status{margin-bottom:10px; font-size:12px; line-height:1.5; padding:8px 11px; border-radius:8px;}
+  .url-status-info{background:var(--surface-2); color:var(--ink-soft); border:1px solid var(--line-soft);}
+  .url-status-error{background:var(--warn-tint); color:var(--warn);}
+
+  .summary-row{display:flex; align-items:center; gap:16px; flex-wrap:wrap;}
+  .summary-count{font-family:var(--mono); font-size:13px; font-weight:700; color:var(--ink); font-variant-numeric:tabular-nums;}
+  .summary-count span{color:var(--accent-dark);}
+
+  .filters{display:flex; flex-wrap:wrap; gap:6px;}
+  .chip{display:inline-flex; align-items:center; gap:6px; border:1px solid var(--line); background:var(--surface); padding:5px 11px 5px 9px; border-radius:999px; font-size:12px; font-weight:600; color:var(--ink-soft); cursor:pointer; user-select:none;}
+  .chip .dot{width:7px; height:7px; border-radius:50%; flex:none;}
+  .chip[data-active="true"]{background:var(--ink); border-color:var(--ink); color:#fff;}
+  .chip[data-active="true"] .dot{outline:1.5px solid rgba(255,255,255,.7);}
+
+  .results-list{display:flex; flex-direction:column; gap:10px; margin-top:16px;}
+
+  .card{border:1px solid var(--line); border-radius:12px; background:var(--surface); padding:14px 16px; display:flex; flex-direction:column; gap:10px;}
+  .card.platform-card{background:var(--surface-2); border-style:dashed;}
+  .card-top{display:flex; align-items:center; gap:12px;}
+  .mono-badge{flex:none; width:38px; height:38px; border-radius:9px; display:flex; align-items:center; justify-content:center; font-family:var(--mono); font-size:11px; font-weight:700; letter-spacing:-0.02em;}
+  .card-title{display:flex; flex-direction:column; gap:2px; min-width:0;}
+  .card-name{font-size:14.5px; font-weight:700; display:flex; align-items:center; gap:8px;}
+  .card-cat{font-family:var(--mono); font-size:10.5px; font-weight:600; letter-spacing:.05em; text-transform:uppercase; width:fit-content; padding:2px 7px; border-radius:5px;}
+  .card-note{font-size:12px; color:var(--ink-soft); line-height:1.5;}
+
+  .badge-warning{display:inline-flex; align-items:center; gap:5px; background:var(--warn-tint); color:var(--warn); font-family:var(--mono); font-size:10px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; padding:3px 8px; border-radius:6px;}
+
+  .id-row{display:flex; flex-wrap:wrap; gap:6px;}
+  .id-chip{font-family:var(--mono); font-size:12px; background:var(--surface-2); border:1px solid var(--line-soft); border-radius:6px; padding:4px 9px; cursor:pointer; color:var(--ink); display:inline-flex; align-items:center; gap:6px;}
+  .id-chip:hover{border-color:var(--ink-faint);}
+  .id-chip small{color:var(--ink-faint); font-family:var(--sans); font-size:10.5px;}
+
+  .snippet{font-family:var(--mono); font-size:11.5px; line-height:1.5; background:var(--surface-2); border:1px solid var(--line-soft); border-radius:8px; padding:9px 11px; color:var(--ink-soft); overflow-x:auto; overflow-y:auto; max-height:280px; white-space:pre;}
+  .snippet mark{background:var(--accent-tint); color:var(--accent-dark); border-radius:3px; padding:0 2px;}
+
+  .dest-list{display:flex; flex-direction:column; gap:7px; margin-top:2px; padding-top:8px; border-top:1px dashed var(--line-soft);}
+  .dest-row{display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:12.5px;}
+  .dest-dot{width:7px; height:7px; border-radius:50%; flex:none;}
+  .dest-name{font-weight:600; color:var(--ink-soft); min-width:170px;}
+
+  .platform-bar{margin-top:6px; padding:10px 14px; background:var(--surface-2); border:1px dashed var(--line); border-radius:10px; font-size:12.5px; color:var(--ink-soft); display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;}
+  .platform-section{display:flex; flex-direction:column; gap:10px; margin-top:10px;}
+
+  .empty{display:flex; flex-direction:column; align-items:center; text-align:center; gap:10px; padding:64px 24px; color:var(--ink-faint);}
+  .empty svg{opacity:.5;}
+  .empty-title{font-size:14px; font-weight:700; color:var(--ink-soft);}
+  .empty-sub{font-size:12.5px; max-width:36ch; line-height:1.5;}
+
+  @media (prefers-reduced-motion: no-preference){
+    .radar-sweep{transform-origin:60px 60px; animation:sweep 3.2s linear infinite;}
+  }
+  @keyframes sweep{ to{ transform:rotate(360deg); } }
+
+  .toast{position:fixed; bottom:20px; left:50%; transform:translateX(-50%) translateY(10px); background:var(--ink); color:#fff; font-size:12.5px; font-weight:600; padding:9px 16px; border-radius:8px; opacity:0; pointer-events:none; transition:opacity .15s ease, transform .15s ease; z-index:20;}
+  .toast[data-show="true"]{opacity:1; transform:translateX(-50%) translateY(0);}
+
+  /* ---------- catalog view ---------- */
+  .disclaimer-bar{font-size:12px; color:var(--ink-faint); background:var(--surface-2); border:1px solid var(--line-soft); border-radius:8px; padding:10px 13px; line-height:1.5;}
+  .catalog-toolbar{display:flex; gap:10px; align-items:center; flex-wrap:wrap;}
+  .search-input{flex:1; min-width:220px; padding:9px 12px; border:1px solid var(--line); border-radius:8px; font-size:13px; background:var(--surface); color:var(--ink);}
+  .catalog-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(340px,1fr)); gap:14px;}
+  .catalog-card{border:1px solid var(--line); border-radius:12px; background:var(--surface); padding:16px; display:flex; flex-direction:column; gap:11px;}
+  .catalog-top{display:flex; align-items:flex-start; gap:12px; justify-content:space-between;}
+  .catalog-desc{font-size:13px; color:var(--ink-soft); line-height:1.55;}
+  .snippet-block{font-family:var(--mono); font-size:11px; line-height:1.55; background:var(--ink); color:#DCE7E6; border-radius:8px; padding:12px 13px; overflow-x:auto; overflow-y:auto; max-height:220px; white-space:pre;}
+  .no-snippet-note{font-size:12px; color:var(--ink-faint); font-style:italic;}
+  .found-badge{font-family:var(--mono); font-size:10px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; background:var(--accent-tint); color:var(--accent-dark); padding:3px 8px; border-radius:6px; white-space:nowrap;}
+  .catalog-footer{display:flex; justify-content:flex-end;}
+
+  /* ---------- plain text report ---------- */
+  .report-pre{font-family:var(--mono); font-size:12.5px; line-height:1.6; color:var(--ink); white-space:pre-wrap; word-break:break-word; margin:0;}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">HTML → TRACKING CODES</div>
+    <h1>Tag Trace</h1>
+    <p>Paste any page's HTML source and Tag Trace pulls out the marketing tracking tags installed on it — vendor, account ID, and where it lives in the markup — and separates real marketing tags from tracking that's just part of the hosting platform.</p>
+  </header>
+
+  <div class="tabs">
+    <button class="tab-btn" data-active="true" data-tab="scanner">Scanner</button>
+    <button class="tab-btn" data-active="false" data-tab="catalog">Tracker Catalog</button>
+    <button class="tab-btn" data-active="false" data-tab="text">Plain Text</button>
+  </div>
+
+  <div id="scannerView">
+    <div class="board">
+      <section class="panel">
+        <div class="panel-head">
+          <span class="panel-title">Source HTML</span>
+          <span class="count" id="charCount">0 characters</span>
+        </div>
+        <div class="panel-body">
+          <div class="url-row">
+            <input type="url" id="urlInput" class="search-input" placeholder="https://example.com — fetch its HTML directly (only works if the site allows it)">
+            <button class="btn btn-sm" id="fetchBtn">Fetch &amp; Scan</button>
+          </div>
+          <div class="url-status" id="urlStatus" style="display:none;"></div>
+          <textarea id="input" spellcheck="false" placeholder="&lt;!-- Paste the page's HTML source here, e.g. from View Source or DevTools --&gt;"></textarea>
+          <div class="toolbar">
+            <div class="toolbar-left">
+              <button class="btn btn-primary" id="scanBtn">Scan for trackers</button>
+              <button class="btn btn-ghost" id="sampleBtn">Load sample</button>
+              <button class="btn btn-ghost" id="clearBtn">Clear</button>
+            </div>
+          </div>
+          <div class="privacy-note"><span class="privacy-dot"></span>Runs entirely in your browser — nothing you paste is sent anywhere.</div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head"><span class="panel-title">Detected tracking codes</span></div>
+        <div class="panel-body" id="resultsBody"></div>
+      </section>
+    </div>
+  </div>
+
+  <div id="catalogView" style="display:none;">
+    <div class="disclaimer-bar" style="margin-bottom:14px;">
+      IDs in these snippets are placeholders (<code>YOUR_ID</code>-style). These are the standard public install formats for each tool — when you have access to the account, always grab the exact code from that tool's own dashboard.
+    </div>
+    <div class="catalog-toolbar" style="margin-bottom:14px;">
+      <input class="search-input" id="catalogSearch" type="text" placeholder="Search trackers (e.g. hotjar, remarketing, chat)…">
+      <div class="filters" id="catalogFilters"></div>
+    </div>
+    <div class="catalog-grid" id="catalogGrid"></div>
+  </div>
+
+  <div id="textView" style="display:none;">
+    <div class="panel">
+      <div class="panel-head">
+        <span class="panel-title">Plain-text report</span>
+        <button class="btn btn-sm" id="copyReportBtn">Copy all</button>
+      </div>
+      <div class="panel-body" id="reportBody"></div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast">Copied</div>
+
+<script>
+(function(){
+  "use strict";
+
+  var CAT = {
+    analytics: { label:"Analytics",                    color:"#3A5FCB", tint:"#E8ECFB" },
+    tagmgr:    { label:"Tag Managers",                  color:"#7C4DD8", tint:"#F0E9FC" },
+    ads:       { label:"Ads & Remarketing",             color:"#B85C08", tint:"#FBEBDA" },
+    session:   { label:"Session & Heatmaps",            color:"#C22D6E", tint:"#FBE4EC" },
+    chat:      { label:"Chat & Support",                color:"#1E8E5A", tint:"#E3F5EB" },
+    cdp:       { label:"CDP & Automation",              color:"#7A7A1E", tint:"#F4F4DC" },
+    leadintel: { label:"Visitor ID (B2B)",              color:"#A6329C", tint:"#F5E3F3" },
+    other:     { label:"Other tracking domain",         color:"#6B7280", tint:"#EEF0F1" },
+    platform:  { label:"Platform / hosting (not a tag)",color:"#8A7F73", tint:"#EFEBE6" }
+  };
+
+  function re(pattern, flags){ return new RegExp(pattern, flags || "g"); }
+  function withG(pattern){ return pattern.flags.indexOf("g") === -1 ? new RegExp(pattern.source, pattern.flags + "g") : pattern; }
+
+  var VENDORS = [
+    { key:"gtm", name:"Google Tag Manager", cat:"tagmgr", mark:"GTM",
+      patterns:[re("GTM-[A-Z0-9]{4,10}")],
+      description:"A container that lets you add and manage other tracking tags (Analytics, Ads, pixels) through a web interface, without editing site code for every new tag.",
+      snippet:"<!-- Google Tag Manager -->\n<script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':\nnew Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],\nj=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=\n'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);\n})(window,document,'script','dataLayer','GTM-XXXXXXX');</" + "script>\n<!-- End Google Tag Manager -->\n\n<!-- put this right after the opening <body> tag -->\n<noscript><iframe src=\"https://www.googletagmanager.com/ns.html?id=GTM-XXXXXXX\"\nheight=\"0\" width=\"0\" style=\"display:none;visibility:hidden\"></iframe></noscript>" },
+
+    { key:"ga4", name:"Google Analytics 4", cat:"analytics", mark:"GA4", skipScan:true,
+      description:"Google's website and app analytics platform — reports on traffic, user behavior, and conversions across your site. Usually loaded via the shared gtag.js tag (see 'Google tag' below), so Tag Trace groups it there when found that way.",
+      snippet:"<!-- Google tag (gtag.js) -->\n<script async src=\"https://www.googletagmanager.com/gtag/js?id=G-XXXXXXXXXX\"></" + "script>\n<script>\n  window.dataLayer = window.dataLayer || [];\n  function gtag(){dataLayer.push(arguments);}\n  gtag('js', new Date());\n  gtag('config', 'G-XXXXXXXXXX');\n</" + "script>" },
+
+    { key:"gads", name:"Google Ads Conversion Tracking", cat:"ads", mark:"AW", skipScan:true,
+      description:"Measures actions (purchases, leads, sign-ups) after someone clicks a Google Ads ad, and can also feed the Google Ads remarketing audience. Usually loaded via the shared gtag.js tag alongside GA4.",
+      snippet:"<script async src=\"https://www.googletagmanager.com/gtag/js?id=AW-XXXXXXXXX\"></" + "script>\n<script>\n  window.dataLayer = window.dataLayer || [];\n  function gtag(){dataLayer.push(arguments);}\n  gtag('js', new Date());\n  gtag('config', 'AW-XXXXXXXXX');\n</" + "script>\n\n<!-- Event snippet for a specific conversion -->\n<script>\n  gtag('event', 'conversion', {'send_to': 'AW-XXXXXXXXX/AbCdEfGhIjKlMnOp'});\n</" + "script>" },
+
+    { key:"gads-legacy", name:"Google Ads Remarketing Tag (legacy)", cat:"ads", mark:"AW",
+      patterns:[re("google_conversion_id\\s*=\\s*(\\d+)"), re("googleadservices\\.com/pagead/conversion")],
+      description:"The older, standalone remarketing tag Google issued before consolidating everything into gtag.js. Still found on sites that haven't updated their Google Ads tag.",
+      snippet:"<script type=\"text/javascript\">\n/* <![CDATA[ */\nvar google_conversion_id = XXXXXXXXX;\nvar google_custom_params = window.google_tag_params;\nvar google_remarketing_only = true;\n/* ]]> */\n</" + "script>\n<script type=\"text/javascript\" src=\"//www.googleadservices.com/pagead/conversion_async.js\"></" + "script>" },
+
+    { key:"uet", name:"Microsoft (Bing) UET Tag", cat:"ads", mark:"UET",
+      patterns:[re("bat\\.bing\\.com"), re("\\bti\\s*:\\s*[\"'](\\d{6,10})[\"']")],
+      description:"Universal Event Tracking — Microsoft Advertising's equivalent of the Google Ads tag, used for conversion tracking and remarketing on Bing/Microsoft ad campaigns.",
+      snippet:"<script>\n(function(w,d,t,r,u){\n  var f,n,i;\n  w[u]=w[u]||[],f=function(){\n    var o={ti:\"XXXXXXXXX\", enableAutoSpaTracking:true};\n    o.q=w[u],w[u]=new UET(o),w[u].push(\"pageLoad\")\n  },\n  n=d.createElement(t),n.src=r,n.async=1,n.onload=n.onreadystatechange=function(){\n    var s=this.readyState;\n    s&&s!==\"loaded\"&&s!==\"complete\"||(f(),f=null)\n  },\n  i=d.getElementsByTagName(t)[0],i.parentNode.insertBefore(n,i)\n})(window,document,\"script\",\"//bat.bing.com/bat.js\",\"uetq\");\n</" + "script>" },
+
+    { key:"fbpixel", name:"Meta (Facebook) Pixel", cat:"ads", mark:"FB",
+      patterns:[re("fbq\\(\\s*['\"]init['\"]\\s*,\\s*['\"](\\d+)['\"]"), re("connect\\.facebook\\.net")],
+      description:"Tracks visits and conversions for Facebook and Instagram ad campaigns, and builds remarketing/lookalike audiences from your site visitors — the same pixel handles both remarketing and conversion tracking.",
+      snippet:"<script>\n!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?\nn.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;\nn.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;\nt.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,\ndocument,'script','https://connect.facebook.net/en_US/fbevents.js');\nfbq('init', 'YOUR_PIXEL_ID');\nfbq('track', 'PageView');\n</" + "script>\n<noscript><img height=\"1\" width=\"1\" style=\"display:none\"\nsrc=\"https://www.facebook.com/tr?id=YOUR_PIXEL_ID&ev=PageView&noscript=1\"/></noscript>" },
+
+    { key:"linkedin", name:"LinkedIn Insight Tag", cat:"ads", mark:"LI",
+      patterns:[re("_linkedin_partner_id\\s*=\\s*[\"']?(\\d+)"), re("snap\\.licdn\\.com")],
+      description:"Tracks conversions from LinkedIn ad campaigns and builds retargeting audiences from site visitors — the same tag handles both remarketing and conversion tracking.",
+      snippet:"<script type=\"text/javascript\">\n_linkedin_partner_id = \"YOUR_PARTNER_ID\";\nwindow._linkedin_data_partner_ids = window._linkedin_data_partner_ids || [];\nwindow._linkedin_data_partner_ids.push(_linkedin_partner_id);\n</" + "script>\n<script type=\"text/javascript\">\n(function(l){if(!l){window.lintrk=function(a,b){window.lintrk.q.push([a,b])};\nwindow.lintrk.q=[]}var s=document.getElementsByTagName(\"script\")[0];\nvar b=document.createElement(\"script\");b.type=\"text/javascript\";b.async=true;\nb.src=\"https://snap.licdn.com/li.lms-analytics/insight.min.js\";\ns.parentNode.insertBefore(b,s);})(window.lintrk);\n</" + "script>\n<noscript><img height=\"1\" width=\"1\" style=\"display:none;\" alt=\"\"\nsrc=\"https://px.ads.linkedin.com/collect/?pid=YOUR_PARTNER_ID&fmt=gif\" /></noscript>" },
+
+    { key:"tiktok", name:"TikTok Pixel", cat:"ads", mark:"TT",
+      patterns:[re("ttq\\.load\\(\\s*['\"]([A-Za-z0-9]+)['\"]")],
+      description:"Tracks conversions from TikTok ad campaigns and builds custom/lookalike audiences of site visitors for retargeting.",
+      snippet:"<script>\n!function (w, d, t) {\n  w.TiktokAnalyticsObject=t;var ttq=w[t]=w[t]||[];ttq.methods=[\"page\",\"track\",\"identify\",\"instances\",\"debug\",\"on\",\"off\",\"once\",\"ready\",\"alias\",\"group\",\"enableCookie\",\"disableCookie\"];\n  ttq.load=function(e,n){var o=document.createElement(\"script\");o.async=!0;o.src=\"https://analytics.tiktok.com/i18n/pixel/events.js?sdkid=\"+e;var a=document.getElementsByTagName(\"script\")[0];a.parentNode.insertBefore(o,a)};\n  ttq.load('YOUR_PIXEL_ID');\n  ttq.page();\n}(window, document, 'ttq');\n</" + "script>" },
+
+    { key:"twitter", name:"X (Twitter) Pixel", cat:"ads", mark:"X",
+      patterns:[re("twq\\(\\s*['\"]init['\"]\\s*,\\s*['\"]([a-z0-9]+)['\"]", "gi")],
+      description:"Tracks website conversions from X (formerly Twitter) ad campaigns and builds tailored audiences for retargeting.",
+      snippet:"<script>\n!function(e,t,n,s,u,a){e.twq||(s=e.twq=function(){s.exe?s.exe.apply(s,arguments):s.queue.push(arguments);},\ns.version='1.1',s.queue=[],u=t.createElement(n),u.async=!0,u.src='https://static.ads-twitter.com/uwt.js',\na=t.getElementsByTagName(n)[0],a.parentNode.insertBefore(u,a))}(window,document,'script');\ntwq('config','YOUR_PIXEL_ID');\n</" + "script>" },
+
+    { key:"pinterest", name:"Pinterest Tag", cat:"ads", mark:"P",
+      patterns:[re("pintrk\\(\\s*['\"]load['\"]\\s*,\\s*['\"]([0-9a-f]+)['\"]")],
+      description:"Tracks conversions from Pinterest ad campaigns and builds retargeting audiences from site activity.",
+      snippet:"<script>\n!function(e){if(!window.pintrk){window.pintrk=function(){window.pintrk.queue.push(Array.prototype.slice.call(arguments))};\nvar n=window.pintrk;n.queue=[],n.version=\"3.0\";var t=document.createElement(\"script\");t.async=!0,t.src=e;\nvar r=document.getElementsByTagName(\"script\")[0];r.parentNode.insertBefore(t,r)}}(\"https://s.pinimg.com/ct/core.js\");\npintrk('load', 'YOUR_TAG_ID');\npintrk('page');\n</" + "script>" },
+
+    { key:"snapchat", name:"Snapchat Pixel", cat:"ads", mark:"SC",
+      patterns:[re("snaptr\\(\\s*['\"]init['\"]\\s*,\\s*['\"]([a-z0-9\\-]+)['\"]", "gi")],
+      description:"Tracks conversions from Snapchat ad campaigns and builds retargeting/lookalike audiences.",
+      snippet:"<script type='text/javascript'>\n(function(e,t,n){if(e.snaptr)return;var a=e.snaptr=function(){\na.handleRequest?a.handleRequest.apply(a,arguments):a.queue.push(arguments)};\na.queue=[];var s='script';var r=t.createElement(s);r.async=!0;\nr.src=n;var u=t.getElementsByTagName(s)[0];\nu.parentNode.insertBefore(r,u);})(window,document,'https://sc-static.net/scevent.min.js');\nsnaptr('init', 'YOUR_PIXEL_ID');\nsnaptr('track', 'PAGE_VIEW');\n</" + "script>" },
+
+    { key:"criteo", name:"Criteo OneTag", cat:"ads", mark:"CRT",
+      patterns:[re("criteo\\.(?:com|net)")],
+      description:"Powers Criteo's dynamic retargeting ads, showing visitors ads for products they viewed on your site.",
+      snippet:"<script type=\"text/javascript\">\nwindow.criteo_q = window.criteo_q || [];\nwindow.criteo_q.push(\n  { event: \"setAccount\", account: YOUR_ACCOUNT_ID },\n  { event: \"setSiteType\", type: \"d\" },\n  { event: \"viewPage\" }\n);\n</" + "script>\n<script src=\"//static.criteo.net/js/ld/ld.js\" async=\"true\"></" + "script>" },
+
+    { key:"outbrain", name:"Outbrain Pixel", cat:"ads", mark:"OB",
+      patterns:[re("outbrain\\.com")],
+      description:"Tracks conversions from Outbrain native-advertising campaigns (the 'recommended articles' widgets).",
+      snippet:"<script>\n!function(_window,_document){\n  var OB_ADV_ID = 'YOUR_OUTBRAIN_ID';\n  var api = _window.obApi = function(){api.dispatch?api.dispatch.apply(api,arguments):api.queue.push(arguments);};\n  api.version='1.1';api.loaded=true;api.marketerId=[OB_ADV_ID];api.queue=[];\n  var tag=_document.createElement('script');tag.async=true;tag.src='//amplify.outbrain.com/cp/obtp.js';\n  var script=_document.getElementsByTagName('script')[0];script.parentNode.insertBefore(tag,script);\n})(window,document);\nobApi('track', 'PAGE_VIEW');\n</" + "script>" },
+
+    { key:"taboola", name:"Taboola Pixel", cat:"ads", mark:"TAB",
+      patterns:[re("taboola\\.com")],
+      description:"Tracks conversions from Taboola native-advertising campaigns.",
+      snippet:"<script type=\"text/javascript\">\nwindow._tfa = window._tfa || [];\nwindow._tfa.push({notify: \"event\", name: \"page_view\", id: YOUR_ACCOUNT_ID});\n!function (t, f, a, x) {\n  if (!document.getElementById(x)) {\n    t.async = 1; t.src = a; t.id = x; f.parentNode.insertBefore(t, f);\n  }\n}(document.createElement('script'), document.getElementsByTagName('script')[0],\n'//cdn.taboola.com/libtrc/unip/YOUR_ACCOUNT_ID/tfa.js', 'tb_tfa_script');\n</" + "script>" },
+
+    { key:"adobe", name:"Adobe Analytics", cat:"analytics", mark:"AA",
+      patterns:[re("omtrdc\\.net|AppMeasurement\\.js")],
+      description:"Enterprise-grade web analytics platform (formerly Omniture/SiteCatalyst) used for detailed visitor behavior and reporting.",
+      snippet:null, snippetNote:"Custom-generated per implementation via Adobe Launch/Experience Platform Tags — there's no universal copy-paste snippet. Detection looks for the AppMeasurement.js library or an omtrdc.net beacon call instead." },
+
+    { key:"matomo", name:"Matomo (Piwik)", cat:"analytics", mark:"MTM",
+      patterns:[re("matomo\\.js|piwik\\.js"), re("setSiteId[\"'\\s,\\[]+(\\d+)")],
+      description:"A self-hosted or cloud web analytics platform, often chosen as a privacy-friendly alternative to Google Analytics.",
+      snippet:"<script>\n  var _paq = window._paq = window._paq || [];\n  _paq.push(['trackPageView']);\n  _paq.push(['enableLinkTracking']);\n  (function() {\n    var u=\"https://YOUR-MATOMO-DOMAIN/\";\n    _paq.push(['setTrackerUrl', u+'matomo.php']);\n    _paq.push(['setSiteId', 'YOUR_SITE_ID']);\n    var d=document, g=d.createElement('script'), s=d.getElementsByTagName('script')[0];\n    g.async=true; g.src=u+'matomo.js'; s.parentNode.insertBefore(g,s);\n  })();\n</" + "script>" },
+
+    { key:"yandex", name:"Yandex Metrica", cat:"analytics", mark:"YM",
+      patterns:[re("ym\\(\\s*(\\d+)\\s*,\\s*[\"']init[\"']"), re("mc\\.yandex\\.ru")],
+      description:"Yandex's analytics tool, popular for sites targeting Russian-speaking markets; includes session replay.",
+      snippet:"<script type=\"text/javascript\">\n(function(m,e,t,r,i,k,a){m[i]=m[i]||function(){(m[i].a=m[i].a||[]).push(arguments)};\nm[i].l=1*new Date();\nk=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a)})\n(window, document, \"script\", \"https://mc.yandex.ru/metrika/tag.js\", \"ym\");\nym(YOUR_COUNTER_ID, \"init\", { clickmap:true, trackLinks:true, accurateTrackBounce:true });\n</" + "script>" },
+
+    { key:"baidu", name:"Baidu Analytics (Tongji)", cat:"analytics", mark:"BD",
+      patterns:[re("hm\\.baidu\\.com/hm\\.js")],
+      description:"Baidu's web analytics tool, used for sites targeting the Chinese market.",
+      snippet:"<script>\nvar _hmt = _hmt || [];\n(function() {\n  var hm = document.createElement(\"script\");\n  hm.src = \"https://hm.baidu.com/hm.js?YOUR_SITE_ID\";\n  var s = document.getElementsByTagName(\"script\")[0];\n  s.parentNode.insertBefore(hm, s);\n})();\n</" + "script>" },
+
+    { key:"hotjar", name:"Hotjar", cat:"session", mark:"HJ",
+      patterns:[re("hjid\\s*:\\s*(\\d+)"), re("static\\.hotjar\\.com")],
+      description:"Heatmaps, session recordings, and on-site surveys that show how visitors actually use a page.",
+      snippet:"<script>\n(function(h,o,t,j,a,r){\n  h.hj=h.hj||function(){(h.hj.q=h.hj.q||[]).push(arguments)};\n  h._hjSettings={hjid:YOUR_SITE_ID,hjsv:6};\n  a=o.getElementsByTagName('head')[0];\n  r=o.createElement('script');r.async=1;\n  r.src=t+h._hjSettings.hjid+j+h._hjSettings.hjsv;\n  a.appendChild(r);\n})(window,document,'https://static.hotjar.com/c/hotjar-','.js?sv=');\n</" + "script>" },
+
+    { key:"luckyorange", name:"Lucky Orange", cat:"session", mark:"LO",
+      patterns:[re("tools\\.luckyorange\\.com/core/lo\\.js\\?site-id=([A-Za-z0-9\\-]+)"), re("tools\\.luckyorange\\.com"), re("window\\.LOQ"), re("d10lpsik1i8c69\\.cloudfront\\.net/w\\.js")],
+      description:"Heatmaps, session recordings, and live chat/polls for understanding on-site visitor behavior.",
+      snippet:"<script async defer src=\"https://tools.luckyorange.com/core/lo.js?site-id=YOUR_SITE_ID\"></" + "script>" },
+
+    { key:"clarity", name:"Microsoft Clarity", cat:"session", mark:"CLR",
+      patterns:[re("clarity\\.ms")],
+      description:"Free heatmap and session-recording tool from Microsoft, similar to Hotjar.",
+      snippet:"<script type=\"text/javascript\">\n    (function(c,l,a,r,i,t,y){\n        c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};\n        t=l.createElement(r);t.async=1;t.src=\"https://www.clarity.ms/tag/\"+i;\n        y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);\n    })(window, document, \"clarity\", \"script\", \"YOUR_PROJECT_ID\");\n</" + "script>" },
+
+    { key:"fullstory", name:"FullStory", cat:"session", mark:"FS",
+      patterns:[re("fullstory\\.com"), re("window\\[[\"']_fs_org[\"']\\]\\s*=\\s*[\"']([a-zA-Z0-9\\-]+)[\"']")],
+      description:"Detailed session replay and product-analytics platform, popular with product and UX teams.",
+      snippet:"<script>\nwindow['_fs_org'] = 'YOUR_ORG_ID';\nwindow['_fs_script'] = 'edge.fullstory.com/s/fs.js';\n(function(m,n,e,t,l,o,g,y){\n  g=m[e]=function(a,b,s){g.q?g.q.push([a,b,s]):g._api(a,b,s);};g.q=[];\n  o=n.createElement(t);o.async=1;o.crossOrigin='anonymous';o.src='https://'+window._fs_script;\n  y=n.getElementsByTagName(t)[0];y.parentNode.insertBefore(o,y);\n})(window,document,window['_fs_namespace']||'FS','script');\n</" + "script>" },
+
+    { key:"mouseflow", name:"Mouseflow", cat:"session", mark:"MF",
+      patterns:[re("mouseflow\\.com")],
+      description:"Session recording, heatmaps, and funnel/form analytics tool.",
+      snippet:"<script type=\"text/javascript\">\nwindow._mfq = window._mfq || [];\n(function() {\n  var mf = document.createElement(\"script\");\n  mf.type = \"text/javascript\"; mf.async = true;\n  mf.src = \"//cdn.mouseflow.com/projects/YOUR_WEBSITE_ID.js\";\n  document.getElementsByTagName(\"head\")[0].appendChild(mf);\n})();\n</" + "script>" },
+
+    { key:"crazyegg", name:"Crazy Egg", cat:"session", mark:"CE",
+      patterns:[re("script\\.crazyegg\\.com")],
+      description:"Heatmaps and A/B testing tool for visualizing where visitors click and scroll.",
+      snippet:"<script type=\"text/javascript\" src=\"//script.crazyegg.com/pages/scripts/0000/YOUR_SITE_ID.js\" async=\"async\"></" + "script>" },
+
+    { key:"visitorqueue", name:"VisitorQueue", cat:"leadintel", mark:"VQ", status:"discontinued",
+      patterns:[re("vq_tracking")],
+      description:"Formerly identified which companies were visiting your site, for B2B sales follow-up. Acquired by Leadinfo in January 2026 and no longer sold as a standalone product — existing customers were migrated to the Leadinfo platform.",
+      snippet:null, snippetNote:"Discontinued — VisitorQueue's install docs now redirect to Leadinfo. If you find this on a live site, it's a legacy install; recommend migrating to Leadinfo or Leadfeeder." },
+
+    { key:"leadinfo", name:"Leadinfo", cat:"leadintel", mark:"LFI",
+      description:"B2B website-visitor identification — reveals which companies are browsing your site from IP data, for sales prospecting. Now also owns the former VisitorQueue customer base.",
+      snippet:null, snippetNote:"Tracking snippet is account-specific and issued from the Leadinfo dashboard (Settings → Website tracking) — no universal public snippet to show here." },
+
+    { key:"leadfeeder", name:"Leadfeeder (Dealfront)", cat:"leadintel", mark:"LF",
+      patterns:[re("lftracker\\.leadfeeder\\.com"), re("sc\\.lfeeder\\.com"), re("window\\.ldfdr")],
+      description:"B2B website-visitor identification tool that reveals which companies visit your site, helping sales teams prioritize warm leads.",
+      snippet:"<script>\n(function(){ window.ldfdr = window.ldfdr || {};\n(function(d, s, ss, fs){ fs = d.getElementsByTagName(s)[0];\nfunction ce(src){ var cs = d.createElement(s); cs.src = src;\nsetTimeout(function(){fs.parentNode.insertBefore(cs,fs)}, 1); }\nce(ss); })(document, 'script',\n'https://sc.lfeeder.com/lftracker_v1_YOUR_TRACKER_ID.js'); })();\n</" + "script>" },
+
+    { key:"intercom", name:"Intercom", cat:"chat", mark:"IC",
+      patterns:[re("widget\\.intercom\\.io"), re("app_id\\s*:\\s*[\"']([a-z0-9]+)[\"']")],
+      description:"Live chat, help center, and product-messaging widget embedded on a site.",
+      snippet:"<script>\n  window.intercomSettings = { api_base: \"https://api-iam.intercom.io\", app_id: \"YOUR_APP_ID\" };\n</" + "script>\n<script>\n  (function(){var w=window;var ic=w.Intercom;if(typeof ic===\"function\"){ic('reattach_activator');ic('update',w.intercomSettings);}\n  else{var d=document;var i=function(){i.c(arguments)};i.q=[];i.c=function(args){i.q.push(args)};w.Intercom=i;\n  var l=function(){var s=d.createElement('script');s.async=true;s.src='https://widget.intercom.io/widget/YOUR_APP_ID';\n  var x=d.getElementsByTagName('script')[0];x.parentNode.insertBefore(s,x);};\n  if(document.readyState==='complete'){l();}else{w.addEventListener('load',l,false);}}})();\n</" + "script>" },
+
+    { key:"drift", name:"Drift", cat:"chat", mark:"DR",
+      patterns:[re("js\\.driftt\\.com"), re("drift\\.load\\([\"']([A-Za-z0-9]+)[\"']\\)")],
+      description:"Conversational marketing and live-chat widget, often used for B2B lead qualification.",
+      snippet:"<script>\n!function(){var t=window.driftt=window.drift=window.driftt||[];\nif(!t.init){t.invoked=!0,t.methods=[\"identify\",\"config\",\"track\",\"reset\",\"debug\",\"show\",\"ping\",\"page\",\"hide\",\"off\",\"on\"],\nt.factory=function(e){return function(){var n=Array.prototype.slice.call(arguments);return n.unshift(e),t.push(n),t}},\nt.methods.forEach(function(e){t[e]=t.factory(e)}),\nt.load=function(t){var e=3e5,n=Math.ceil(new Date()/e)*e,o=document.createElement(\"script\");\no.async=!0,o.src=\"https://js.driftt.com/include/\"+n+\"/\"+t+\".js\";\nvar i=document.getElementsByTagName(\"script\")[0];i.parentNode.insertBefore(o,i)}}}();\ndrift.load('YOUR_DRIFT_ID');\n</" + "script>" },
+
+    { key:"zendesk", name:"Zendesk / Zopim Chat", cat:"chat", mark:"ZD",
+      patterns:[re("zdassets\\.com"), re("zopim\\.com")],
+      description:"Customer support widget (chat and/or help center) embedded on a site.",
+      snippet:"<script id=\"ze-snippet\" src=\"https://static.zdassets.com/ekr/snippet.js?key=YOUR_WIDGET_KEY\"> </" + "script>" },
+
+    { key:"tawk", name:"Tawk.to", cat:"chat", mark:"TK",
+      patterns:[re("embed\\.tawk\\.to")],
+      description:"Free live chat widget embedded on a site.",
+      snippet:"<script type=\"text/javascript\">\nvar Tawk_API=Tawk_API||{}, Tawk_LoadStart=new Date();\n(function(){\nvar s1=document.createElement(\"script\"),s0=document.getElementsByTagName(\"script\")[0];\ns1.async=true;\ns1.src='https://embed.tawk.to/YOUR_PROPERTY_ID/YOUR_WIDGET_ID';\ns1.charset='UTF-8';\ns1.setAttribute('crossorigin','*');\ns0.parentNode.insertBefore(s1,s0);\n})();\n</" + "script>" },
+
+    { key:"crisp", name:"Crisp", cat:"chat", mark:"CR",
+      patterns:[re("CRISP_WEBSITE_ID\\s*=\\s*[\"']([a-z0-9\\-]+)[\"']", "i"), re("client\\.crisp\\.chat")],
+      description:"Live chat and customer messaging widget embedded on a site.",
+      snippet:"<script type=\"text/javascript\">\nwindow.$crisp=[];window.CRISP_WEBSITE_ID=\"YOUR_WEBSITE_ID\";\n(function(){d=document;s=d.createElement(\"script\");s.src=\"https://client.crisp.chat/l.js\";s.async=1;\nd.getElementsByTagName(\"head\")[0].appendChild(s);})();\n</" + "script>" },
+
+    { key:"segment", name:"Segment", cat:"cdp", mark:"SEG",
+      patterns:[re("cdn\\.segment\\.com"), re("analytics\\.load\\([\"']([A-Za-z0-9]+)[\"']\\)")],
+      description:"A customer data platform (CDP) that collects events once and routes them to your other analytics/marketing tools.",
+      snippet:"<script>\n  !function(){var analytics=window.analytics=window.analytics||[];\n  if(!analytics.initialize){analytics.invoked=!0;\n  analytics.load=function(key){var t=document.createElement(\"script\");t.async=!0;\n  t.src=\"https://cdn.segment.com/analytics.js/v1/\"+key+\"/analytics.min.js\";\n  var n=document.getElementsByTagName(\"script\")[0];n.parentNode.insertBefore(t,n);}}\n  analytics.load(\"YOUR_WRITE_KEY\");\n  analytics.page();\n  }}();\n</" + "script>" },
+
+    { key:"hubspot", name:"HubSpot Tracking Code", cat:"cdp", mark:"HS",
+      patterns:[re("(?:[a-z0-9\\-]+\\.)?hs-scripts\\.com/(\\d+)\\.js"), re("hs-scripts\\.com"), re("hs-analytics\\.net"), re("id=[\"']hs-script-loader[\"']")],
+      description:"Connects a site to a HubSpot account for analytics, form tracking, and chat — can be installed on any site, HubSpot-hosted or not.",
+      snippet:"<script type=\"text/javascript\" id=\"hs-script-loader\" async defer src=\"//js.hs-scripts.com/YOUR_PORTAL_ID.js\"></" + "script>",
+      snippetNote:"HubSpot generates this per-account under Settings → Tracking & Analytics → Tracking code. Some accounts use a region-prefixed domain (e.g. js-na1.hs-scripts.com) instead." },
+
+    { key:"marketo", name:"Marketo (Adobe)", cat:"cdp", mark:"MKT",
+      patterns:[re("munchkin\\.marketo\\.net")],
+      description:"Marketing automation platform tracking code, used for lead scoring and nurture campaigns.",
+      snippet:"<script type=\"text/javascript\">\n(function() {\n  var didInit = false;\n  function initMunchkin() {\n    if (didInit === false) { didInit = true; Munchkin.init('YOUR_MUNCHKIN_ID'); }\n  }\n  var s = document.createElement('script');\n  s.async = true;\n  s.src = '//munchkin.marketo.net/munchkin.js';\n  s.onload = initMunchkin;\n  document.getElementsByTagName('head')[0].appendChild(s);\n})();\n</" + "script>" },
+
+    { key:"pardot", name:"Pardot (Salesforce)", cat:"cdp", mark:"PD",
+      patterns:[re("pi\\.pardot\\.com")],
+      description:"Salesforce's B2B marketing-automation tracking code, used for lead scoring and nurture campaigns.",
+      snippet:"<script type=\"text/javascript\">\npiAId = 'YOUR_ACCOUNT_ID';\npiCId = 'YOUR_CAMPAIGN_ID';\npiHostname = 'pi.pardot.com';\n(function() {\n  function async_load(){\n    var s = document.createElement('script');\n    s.src = ('https:' == document.location.protocol ? 'https://pi' : 'http://cdn') + '.pardot.com/pd.js';\n    var c = document.getElementsByTagName('script')[0];\n    c.parentNode.insertBefore(s, c);\n  }\n  window.addEventListener('load', async_load, false);\n})();\n</" + "script>" },
+
+    { key:"activecamp", name:"ActiveCampaign", cat:"cdp", mark:"AC",
+      patterns:[re("trackcmp\\.net")],
+      description:"Email marketing and marketing-automation platform tracking code, used to trigger automations based on site behavior.",
+      snippet:"<script type=\"text/javascript\">\n(function(e,t,o,n,p,r,i){e.visitorGlobalObjectAlias=n;e[e.visitorGlobalObjectAlias]=e[e.visitorGlobalObjectAlias]||function(){\n(e[e.visitorGlobalObjectAlias].q=e[e.visitorGlobalObjectAlias].q||[]).push(arguments)};\ne[e.visitorGlobalObjectAlias].l=(new Date).getTime();\nr=t.createElement(\"script\"),i=t.getElementsByTagName(\"script\")[0];\nr.async=!0,r.src=o;i.parentNode.insertBefore(r,i)\n})(window,document,\"https://diffuser-cdn.app-us1.com/diffuser/diffuser.js\",\"vgo\");\nvgo('setAccount', 'YOUR_ACCOUNT_ID');\nvgo('setTrackByDefault', true);\nvgo('process');\n</" + "script>" }
+  ];
+
+  var VENDOR_BY_KEY = {};
+  VENDORS.forEach(function(v){ VENDOR_BY_KEY[v.key] = v; });
+
+  var GTAG_FAMILY_CATALOG = {
+    key:"gtagfamily", name:"Google tag (gtag.js)", cat:"tagmgr", mark:"gtag",
+    description:"Google's unified loader script. A single gtag.js can drive several destinations at once — a GA4 property, a Google Ads account, Campaign Manager/Floodlight — each configured with its own gtag('config', ID) call. Tag Trace groups every destination it finds under the one loader instead of listing them as unrelated tags.",
+    snippet:"<script async src=\"https://www.googletagmanager.com/gtag/js?id=G-XXXXXXXXXX\"></" + "script>\n<script>\n  window.dataLayer = window.dataLayer || [];\n  function gtag(){dataLayer.push(arguments);}\n  gtag('js', new Date());\n  gtag('config', 'G-XXXXXXXXXX');   // GA4 destination\n  gtag('config', 'AW-XXXXXXXXX');   // Google Ads destination — same loader\n</" + "script>"
+  };
+
+  var PLATFORM_DETECTORS = [
+    { key:"shopify", name:"Shopify (native store analytics)", mark:"SHP",
+      patterns:[re("monorail-edge\\.shopifysvc\\.com"), re("cdn\\.shopify\\.com/s/trekkie"), re("ShopifyAnalytics"), re("Shopify\\.analytics")],
+      description:"This site is built on Shopify — Shopify's own store analytics (\"Trekkie\") ships by default on every Shopify store to power Shopify's dashboards. It's not a marketing tag a merchant chose to add." },
+    { key:"wordpress", name:"Jetpack Stats / WordPress.com", mark:"WP",
+      patterns:[re("stats\\.wp\\.com"), re("pixel\\.wp\\.com"), re("window\\._stq"), re("window\\._tkq")],
+      description:"Built-in visitor counter for WordPress.com sites, or self-hosted WordPress sites with the Jetpack plugin's Stats module enabled. Not a marketing pixel someone deliberately installed." },
+    { key:"wix", name:"Wix (native site analytics)", mark:"WIX",
+      patterns:[re("static\\.parastorage\\.com"), re("frog\\.wix\\.com"), re("wixBiSession"), re("thunderbolt")],
+      description:"Wix's internal analytics/logging system (\"Thunderbolt BI\"), present on every Wix site by default — separate from any marketing pixels the site owner adds." },
+    { key:"squarespace", name:"Squarespace (native site analytics)", mark:"SQSP",
+      patterns:[re("static1\\.squarespace\\.com"), re("squarespace-cdn\\.com"), re("sqspcdn\\.com"), re("Squarespace\\.Analytics")],
+      description:"Squarespace's built-in analytics dashboard tracking (page views, traffic sources), present on every Squarespace site by default." },
+    { key:"hubspot-cms", name:"HubSpot CMS Hosting", mark:"HS",
+      patterns:[re("hs-sites(-[a-z0-9]+)?\\.(com|eu|net|ca|au)"), re("hubspotusercontent\\d{2}\\.net"), re("cdn2\\.hubspot\\.net"), re("hs_cos_wrapper")],
+      description:"This page appears to be served directly from HubSpot's CMS (hs-sites domain, HubSpot asset CDN, or HubSpot page-builder markup), rather than just having HubSpot's tracking code installed on externally-hosted pages.",
+      reclassifyVendorKey:"hubspot" }
+  ];
+
+  var OTHER_DOMAINS = [
+    "doubleclick.net","googlesyndication.com","google-analytics.com","adroll.com",
+    "quantserve.com","scorecardresearch.com","amazon-adsystem.com","rlcdn.com",
+    "demdex.net","bluekai.com","adsrvr.org","krxd.net","mathtag.com","rubiconproject.com",
+    "pubmatic.com","openx.net","stackadapt.com","yieldmo.com","zemanta.com"
+  ];
+
+  function escapeHtml(s){
+    return s.replace(/[&<>"']/g, function(c){ return ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"})[c]; });
+  }
+
+  function unescapeSnippet(s){
+    return s.replace(/<\/?mark>/g, "")
+      .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+      .replace(/&quot;/g, "\"").replace(/&#39;/g, "'")
+      .replace(/…/g, "...");
+  }
+
+  var SCRIPT_CLOSE_TAG = "</scr" + "ipt>";
+
+  function fullBlockBounds(html, index, len){
+    var lower = html.toLowerCase();
+    var scriptStart = lower.lastIndexOf("<script", index);
+    if (scriptStart !== -1) {
+      var closeIdx = lower.indexOf(SCRIPT_CLOSE_TAG, scriptStart);
+      if (closeIdx !== -1 && index < closeIdx) {
+        return { start: scriptStart, end: closeIdx + SCRIPT_CLOSE_TAG.length };
+      }
+    }
+    var tagStart = html.lastIndexOf("<", index);
+    var tagEnd = html.indexOf(">", index + len);
+    if (tagStart !== -1 && tagEnd !== -1) {
+      return { start: tagStart, end: tagEnd + 1 };
+    }
+    return { start: Math.max(0, index - 40), end: Math.min(html.length, index + len + 40) };
+  }
+
+  function snippetAround(html, index, len){
+    var b = fullBlockBounds(html, index, len);
+    var pre = escapeHtml(html.slice(b.start, index));
+    var mid = escapeHtml(html.slice(index, index + len));
+    var post = escapeHtml(html.slice(index + len, b.end));
+    return pre + "<mark>" + mid + "</mark>" + post;
+  }
+
+  var MAX_SNIPPET_BLOCKS = 6;
+
+  function collectSnippets(html, matches, opts){
+    var cap = !opts || opts.cap !== false;
+    var seenStart = {};
+    var items = [];
+    matches.forEach(function(m){
+      var b = fullBlockBounds(html, m.index, m.len);
+      if (seenStart[b.start]) return;
+      seenStart[b.start] = true;
+      items.push({ start: b.start, text: snippetAround(html, m.index, m.len) });
+    });
+    if (!items.length) return null;
+    items.sort(function(a, b){ return a.start - b.start; });
+    if (!cap) return items.map(function(i){ return i.text; }).join("\n\n");
+    var shown = items.slice(0, MAX_SNIPPET_BLOCKS);
+    var extra = items.length - shown.length;
+    var joined = shown.map(function(i){ return i.text; }).join("\n\n");
+    if (extra > 0) joined += "\n\n… +" + extra + " more occurrence" + (extra === 1 ? "" : "s") + " not shown.";
+    return joined;
+  }
+
+  function classifyGtagDest(id){
+    if (/^G-/.test(id)) return { label:"Google Analytics 4 property", cat:"analytics" };
+    if (/^AW-/.test(id)) return { label:"Google Ads account", cat:"ads" };
+    if (/^DC-/.test(id)) return { label:"Campaign Manager / Floodlight", cat:"ads" };
+    if (/^GT-/.test(id)) return { label:"Server-side Google tag", cat:"tagmgr" };
+    if (/^UA-/.test(id)) return { label:"Universal Analytics (legacy)", cat:"analytics" };
+    return { label:"Google tag destination", cat:"tagmgr" };
+  }
+
+  function buildGoogleTagFamily(html){
+    var loaderRe = withG(re("googletagmanager\\.com/gtag/js\\?id=([A-Za-z0-9\\-]+)"));
+    var configRe = withG(re("gtag\\(\\s*['\"]config['\"]\\s*,\\s*['\"]([A-Za-z0-9\\-]+)['\"]"));
+    var sendToRe = withG(re("send_to['\"]?\\s*:\\s*['\"]([A-Za-z0-9\\-]+)(?:/([A-Za-z0-9_\\-]+))?['\"]"));
+    var bareRe = withG(re("\\b(G-[A-Z0-9]{6,10}|AW-\\d{6,12}|DC-\\d{6,10})\\b"));
+
+    var dests = {};
+    var order = [];
+    var hasLoader = false;
+    var matchPositions = [];
+
+    function addDest(id, label){
+      if (!dests[id]) { dests[id] = { id:id, labels: label ? [label] : [] }; order.push(id); }
+      else if (label && dests[id].labels.indexOf(label) === -1) { dests[id].labels.push(label); }
+    }
+
+    var m;
+    while ((m = loaderRe.exec(html)) !== null) {
+      hasLoader = true;
+      addDest(m[1], null);
+      matchPositions.push({ index:m.index, len:m[0].length });
+    }
+    while ((m = configRe.exec(html)) !== null) {
+      addDest(m[1], null);
+      matchPositions.push({ index:m.index, len:m[0].length });
+    }
+    while ((m = sendToRe.exec(html)) !== null) {
+      addDest(m[1], m[2] || null);
+      matchPositions.push({ index:m.index, len:m[0].length });
+    }
+    while ((m = bareRe.exec(html)) !== null) {
+      addDest(m[1], null);
+    }
+
+    if (order.length === 0) return null;
+
+    var destinations = order.map(function(id){
+      var info = classifyGtagDest(id);
+      return { id:id, labels:dests[id].labels, catLabel:info.label, cat:info.cat };
+    });
+
+    return {
+      type:"gtagFamily",
+      key:"gtagfamily",
+      name: hasLoader ? "Google tag (gtag.js)" : "Google tag destinations (loader not directly visible — likely injected via GTM)",
+      cat:"tagmgr",
+      mark:"gtag",
+      destinations: destinations,
+      positions: matchPositions,
+      snippet: collectSnippets(html, matchPositions)
+    };
+  }
+
+  function scanVendors(html){
+    var found = [];
+    VENDORS.forEach(function(v){
+      if (v.skipScan || !v.patterns) return;
+      var ids = [], seenIds = {}, positions = [], matched = false;
+      v.patterns.forEach(function(pattern){
+        var r = withG(pattern);
+        var m;
+        while ((m = r.exec(html)) !== null) {
+          matched = true;
+          if (m[1] && !seenIds[m[1]]) { seenIds[m[1]] = true; ids.push(m[1]); }
+          positions.push({ index:m.index, len:m[0].length });
+          if (m[0].length === 0) r.lastIndex++;
+        }
+      });
+      if (matched) found.push({ key:v.key, name:v.name, cat:v.cat, mark:v.mark, ids:ids, positions:positions, snippet:collectSnippets(html, positions), status:v.status || null });
+    });
+    return found;
+  }
+
+  function scanPlatforms(html){
+    var found = [];
+    PLATFORM_DETECTORS.forEach(function(p){
+      var positions = [];
+      p.patterns.forEach(function(pattern){
+        var r = withG(pattern);
+        var m;
+        while ((m = r.exec(html)) !== null) {
+          positions.push({ index:m.index, len:m[0].length });
+          if (m[0].length === 0) r.lastIndex++;
+        }
+      });
+      if (positions.length) found.push({ key:p.key, name:p.name, cat:"platform", mark:p.mark, ids:[], positions:positions, snippet:collectSnippets(html, positions), note:p.description, reclassifyVendorKey:p.reclassifyVendorKey || null });
+    });
+    return found;
+  }
+
+  function scanOtherDomains(html){
+    var found = [];
+    var attrRe = /(?:src|href|action)=["']([^"']+)["']/gi;
+    var m2, positionsByDomain = {};
+    while ((m2 = attrRe.exec(html)) !== null) {
+      var hostMatch = m2[1].match(/^(?:https?:)?\/\/([^\/]+)/i);
+      var host = hostMatch ? hostMatch[1].toLowerCase() : null;
+      if (!host) continue;
+      OTHER_DOMAINS.forEach(function(d){
+        if (host.indexOf(d) !== -1) {
+          if (!positionsByDomain[d]) positionsByDomain[d] = [];
+          positionsByDomain[d].push({ index:m2.index, len:m2[0].length });
+        }
+      });
+    }
+    Object.keys(positionsByDomain).forEach(function(d){
+      found.push({ key:"other-"+d, name:d, cat:"other", mark:"·", ids:[], positions:positionsByDomain[d], snippet: collectSnippets(html, positionsByDomain[d]) });
+    });
+    return found;
+  }
+
+  function scan(html){
+    var results = scanVendors(html);
+    var gtagFamily = buildGoogleTagFamily(html);
+    if (gtagFamily) results.unshift(gtagFamily);
+
+    var platformResults = scanPlatforms(html);
+
+    platformResults.forEach(function(p){
+      if (!p.reclassifyVendorKey) return;
+      var target = results.find(function(r){ return r.key === p.reclassifyVendorKey; });
+      if (target) {
+        target.cat = "platform";
+        target.note = "Bundled with " + p.name + " (detected above) — this looks like platform-native tracking rather than a marketing tag someone chose to install.";
+      }
+    });
+
+    results = results.concat(platformResults);
+    results = results.concat(scanOtherDomains(html));
+    return results;
+  }
+
+  /* ---------------- Scanner UI ---------------- */
+
+  var input = document.getElementById("input");
+  var charCount = document.getElementById("charCount");
+  var resultsBody = document.getElementById("resultsBody");
+  var scanBtn = document.getElementById("scanBtn");
+  var sampleBtn = document.getElementById("sampleBtn");
+  var clearBtn = document.getElementById("clearBtn");
+  var toast = document.getElementById("toast");
+  var urlInput = document.getElementById("urlInput");
+  var fetchBtn = document.getElementById("fetchBtn");
+  var urlStatus = document.getElementById("urlStatus");
+
+  var activeFilter = null;
+  var lastResults = [];
+  var lastScanHtml = "";
+  var foundKeys = {};
+  var showPlatform = false;
+
+  function showToast(msg){
+    toast.textContent = msg;
+    toast.setAttribute("data-show", "true");
+    clearTimeout(showToast._t);
+    showToast._t = setTimeout(function(){ toast.setAttribute("data-show", "false"); }, 1400);
+  }
+
+  function copyText(text){
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function(){ showToast("Copied"); });
+    } else { showToast("Copy not supported"); }
+  }
+
+  function renderEmpty(hasScanned){
+    resultsBody.innerHTML =
+      '<div class="empty">' +
+        '<svg width="120" height="120" viewBox="0 0 120 120" fill="none">' +
+          '<circle cx="60" cy="60" r="46" stroke="var(--ink-faint)" stroke-width="1.2"/>' +
+          '<circle cx="60" cy="60" r="30" stroke="var(--ink-faint)" stroke-width="1.2"/>' +
+          '<circle cx="60" cy="60" r="14" stroke="var(--ink-faint)" stroke-width="1.2"/>' +
+          (hasScanned ? '' : '<g class="radar-sweep"><path d="M60 60 L60 14 A46 46 0 0 1 92.5 27.5 Z" fill="var(--accent)" opacity=".16"/></g>') +
+          '<circle cx="60" cy="60" r="2.5" fill="var(--accent)"/>' +
+        '</svg>' +
+        '<div class="empty-title">' + (hasScanned ? "No tracking codes found" : "No scan yet") + '</div>' +
+        '<div class="empty-sub">' + (hasScanned
+          ? "This markup doesn't match any of the known analytics, ads, or behavior-tracking signatures Tag Trace looks for."
+          : 'Paste HTML on the left and click "Scan for trackers", or try the sample to see how results look.') + '</div>' +
+      '</div>';
+  }
+
+  function renderIdRow(ids){
+    if (!ids.length) return "";
+    return '<div class="id-row">' + ids.map(function(id){
+      return '<span class="id-chip" data-copy="' + escapeHtml(id) + '">' + escapeHtml(id) + ' <small>copy</small></span>';
+    }).join("") + '</div>';
+  }
+
+  function renderVendorCard(r){
+    var warn = r.status === "discontinued" ? '<span class="badge-warning">Discontinued</span>' : "";
+    var note = r.note ? '<div class="card-note">' + escapeHtml(r.note) + '</div>' : "";
+    var snippet = r.snippet ? '<div class="snippet">' + r.snippet + '</div>' : "";
+    var cls = r.cat === "platform" ? "card platform-card" : "card";
+    return (
+      '<div class="' + cls + '">' +
+        '<div class="card-top">' +
+          '<div class="mono-badge" style="background:' + CAT[r.cat].tint + '; color:' + CAT[r.cat].color + '">' + escapeHtml(r.mark) + '</div>' +
+          '<div class="card-title">' +
+            '<span class="card-name">' + escapeHtml(r.name) + warn + '</span>' +
+            '<span class="card-cat" style="background:' + CAT[r.cat].tint + '; color:' + CAT[r.cat].color + '">' + CAT[r.cat].label + '</span>' +
+          '</div>' +
+        '</div>' +
+        note + renderIdRow(r.ids) + snippet +
+      '</div>'
+    );
+  }
+
+  function renderGtagFamilyCard(r){
+    var destRows = r.destinations.map(function(d){
+      var idChip = '<span class="id-chip" data-copy="' + escapeHtml(d.id) + '">' + escapeHtml(d.id) + ' <small>copy</small></span>';
+      var labelChips = d.labels.map(function(l){
+        return '<span class="id-chip" data-copy="' + escapeHtml(l) + '">label: ' + escapeHtml(l) + ' <small>copy</small></span>';
+      }).join("");
+      return (
+        '<div class="dest-row">' +
+          '<span class="dest-dot" style="background:' + CAT[d.cat].color + '"></span>' +
+          '<span class="dest-name">' + escapeHtml(d.catLabel) + '</span>' +
+          idChip + labelChips +
+        '</div>'
+      );
+    }).join("");
+    var snippet = r.snippet ? '<div class="snippet">' + r.snippet + '</div>' : "";
+    return (
+      '<div class="card">' +
+        '<div class="card-top">' +
+          '<div class="mono-badge" style="background:' + CAT.tagmgr.tint + '; color:' + CAT.tagmgr.color + '">' + escapeHtml(r.mark) + '</div>' +
+          '<div class="card-title">' +
+            '<span class="card-name">' + escapeHtml(r.name) + '</span>' +
+            '<span class="card-cat" style="background:' + CAT.tagmgr.tint + '; color:' + CAT.tagmgr.color + '">1 loader → ' + r.destinations.length + ' destination' + (r.destinations.length===1?"":"s") + '</span>' +
+          '</div>' +
+        '</div>' +
+        snippet +
+        '<div class="dest-list">' + destRows + '</div>' +
+      '</div>'
+    );
+  }
+
+  function renderCard(r){
+    return r.type === "gtagFamily" ? renderGtagFamilyCard(r) : renderVendorCard(r);
+  }
+
+  function render(results){
+    lastResults = results;
+    foundKeys = {};
+    results.forEach(function(r){ foundKeys[r.key] = true; });
+    if (r_gtagKeysInto(results)) { /* no-op helper below keeps lint quiet */ }
+
+    var marketing = results.filter(function(r){ return r.cat !== "platform"; });
+    var platform = results.filter(function(r){ return r.cat === "platform"; });
+
+    if (!marketing.length && !platform.length) { renderEmpty(true); return; }
+
+    var byCat = {};
+    marketing.forEach(function(r){ byCat[r.cat] = (byCat[r.cat] || 0) + 1; });
+
+    var filterChips = ['<div class="chip" data-active="' + (activeFilter===null) + '" data-key="all"><span class="dot" style="background:var(--ink-faint)"></span>All (' + marketing.length + ')</div>'];
+    Object.keys(byCat).forEach(function(c){
+      filterChips.push(
+        '<div class="chip" data-active="' + (activeFilter===c) + '" data-key="' + c + '">' +
+          '<span class="dot" style="background:' + CAT[c].color + '"></span>' + CAT[c].label + ' (' + byCat[c] + ')' +
+        '</div>'
+      );
+    });
+
+    var visible = activeFilter ? marketing.filter(function(r){ return r.cat === activeFilter; }) : marketing;
+    var cardsHtml = visible.length
+      ? visible.map(renderCard).join("")
+      : '<div class="empty-sub" style="padding:24px 0;">No results in this category.</div>';
+
+    var platformBar = platform.length
+      ? '<div class="platform-bar">' +
+          '<span>🔧 ' + platform.length + ' platform/hosting script' + (platform.length===1?"":"s") + ' hidden — usually injected by the CMS itself, not chosen by a marketer.</span>' +
+          '<button class="btn btn-ghost btn-sm" id="togglePlatformBtn">' + (showPlatform ? "Hide" : "Show") + '</button>' +
+        '</div>' +
+        (showPlatform ? '<div class="platform-section">' + platform.map(renderCard).join("") + '</div>' : "")
+      : "";
+
+    var summaryLabel = marketing.length === 1 ? "tracking code" : "tracking codes";
+    resultsBody.innerHTML =
+      '<div class="summary-row">' +
+        '<div class="summary-count"><span>' + marketing.length + '</span> ' + summaryLabel + ' detected</div>' +
+        '<div class="filters">' + filterChips.join("") + '</div>' +
+      '</div>' +
+      '<div class="results-list">' + cardsHtml + '</div>' +
+      platformBar;
+
+    resultsBody.querySelectorAll(".chip").forEach(function(el){
+      el.addEventListener("click", function(){
+        activeFilter = el.getAttribute("data-key") === "all" ? null : el.getAttribute("data-key");
+        render(lastResults);
+      });
+    });
+    resultsBody.querySelectorAll(".id-chip").forEach(function(el){
+      el.addEventListener("click", function(){ copyText(el.getAttribute("data-copy")); });
+    });
+    var toggleBtn = document.getElementById("togglePlatformBtn");
+    if (toggleBtn) toggleBtn.addEventListener("click", function(){ showPlatform = !showPlatform; render(lastResults); });
+  }
+
+  function r_gtagKeysInto(results){
+    results.forEach(function(r){
+      if (r.type === "gtagFamily") {
+        r.destinations.forEach(function(d){
+          if (/^G-/.test(d.id)) foundKeys.ga4 = true;
+          if (/^AW-/.test(d.id)) foundKeys.gads = true;
+        });
+      }
+    });
+    return true;
+  }
+
+  function runScan(){
+    activeFilter = null;
+    showPlatform = false;
+    lastScanHtml = input.value;
+    render(scan(input.value));
+  }
+
+  function updateCount(){
+    var n = input.value.length;
+    charCount.textContent = n.toLocaleString() + " character" + (n === 1 ? "" : "s");
+  }
+
+  scanBtn.addEventListener("click", runScan);
+  input.addEventListener("input", updateCount);
+  clearBtn.addEventListener("click", function(){
+    input.value = ""; updateCount(); activeFilter = null; lastResults = []; foundKeys = {};
+    renderEmpty(false);
+  });
+
+  function setUrlStatus(msg, type){
+    if (!msg) { urlStatus.style.display = "none"; urlStatus.textContent = ""; return; }
+    urlStatus.style.display = "";
+    urlStatus.className = "url-status " + (type === "error" ? "url-status-error" : "url-status-info");
+    urlStatus.textContent = msg;
+  }
+
+  function fetchAndScan(){
+    var url = urlInput.value.trim();
+    if (!url) return;
+    if (!/^https?:\/\//i.test(url)) {
+      setUrlStatus("Enter a full URL starting with http:// or https://", "error");
+      return;
+    }
+    fetchBtn.disabled = true;
+    fetchBtn.textContent = "Fetching…";
+    setUrlStatus("Fetching " + url + " …", "info");
+
+    fetch(url).then(function(res){
+      if (!res.ok) throw new Error("Server responded with " + res.status);
+      return res.text();
+    }).then(function(html){
+      input.value = html;
+      updateCount();
+      runScan();
+      setUrlStatus("Fetched " + html.length.toLocaleString() + " characters from " + url + ".", "info");
+    }).catch(function(){
+      setUrlStatus(
+        "Couldn't fetch that URL directly — most sites block cross-origin requests from the browser (CORS), and this sandbox blocks external network calls too. " +
+        "Instead: open the page, right-click → \"View Page Source\" (or Ctrl/Cmd+U), select all, copy, and paste it into the box below.",
+        "error"
+      );
+    }).finally(function(){
+      fetchBtn.disabled = false;
+      fetchBtn.textContent = "Fetch & Scan";
+    });
+  }
+
+  fetchBtn.addEventListener("click", fetchAndScan);
+  urlInput.addEventListener("keydown", function(e){ if (e.key === "Enter") fetchAndScan(); });
+
+  var SAMPLE = [
+    "<!DOCTYPE html><html><head>",
+    "<script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);})(window,document,'script','dataLayer','GTM-N8QK2WZ');</" + "script>",
+    "<script async src=\"https://www.googletagmanager.com/gtag/js?id=G-7H3K9PLQ2X\"></" + "script>",
+    "<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag('js',new Date());gtag('config','G-7H3K9PLQ2X');gtag('config','AW-91827364');</" + "script>",
+    "<script>gtag('event','conversion',{'send_to':'AW-91827364/AbCdEfGhIjKl'});</" + "script>",
+    "<script>!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');fbq('init','1029384756201938');fbq('track','PageView');</" + "script>",
+    "<script>_linkedin_partner_id = \"4837291\"; window._linkedin_data_partner_ids = window._linkedin_data_partner_ids || []; window._linkedin_data_partner_ids.push(_linkedin_partner_id);</" + "script>",
+    "<script src=\"https://snap.licdn.com/li.lms-analytics/insight.min.js\"></" + "script>",
+    "<script>(function(h,o,t,j,a,r){h.hj=h.hj||function(){(h.hj.q=h.hj.q||[]).push(arguments)};h._hjSettings={hjid:3184920,hjsv:6};a=o.getElementsByTagName('head')[0];r=o.createElement('script');r.async=1;r.src=t+h._hjSettings.hjid+j+h._hjSettings.hjsv;a.appendChild(r);})(window,document,'https://static.hotjar.com/c/hotjar-','.js?sv=');</" + "script>",
+    "<script async defer src=\"https://tools.luckyorange.com/core/lo.js?site-id=98274-abcd\"></" + "script>",
+    "<script async defer src=\"//js.hs-scripts.com/23481029.js\"></" + "script>",
+    "<link rel=\"stylesheet\" href=\"https://static1.squarespace.com/static/vendor.css\">",
+    "</head><body></body></html>"
+  ].join("\n");
+
+  sampleBtn.addEventListener("click", function(){ input.value = SAMPLE; updateCount(); runScan(); });
+  updateCount();
+  renderEmpty(false);
+
+  /* ---------------- Tabs ---------------- */
+
+  var scannerView = document.getElementById("scannerView");
+  var catalogView = document.getElementById("catalogView");
+  var textView = document.getElementById("textView");
+  document.querySelectorAll(".tab-btn").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      document.querySelectorAll(".tab-btn").forEach(function(b){ b.setAttribute("data-active", "false"); });
+      btn.setAttribute("data-active", "true");
+      var tab = btn.getAttribute("data-tab");
+      scannerView.style.display = tab === "scanner" ? "" : "none";
+      catalogView.style.display = tab === "catalog" ? "" : "none";
+      textView.style.display = tab === "text" ? "" : "none";
+      if (tab === "catalog") renderCatalog();
+      if (tab === "text") renderReport();
+    });
+  });
+
+  /* ---------------- Plain-text report ---------------- */
+
+  var reportBody = document.getElementById("reportBody");
+  var copyReportBtn = document.getElementById("copyReportBtn");
+  var lastReportText = "";
+
+  function reportBlock(lines, title, catKey, description, idsLine, code){
+    lines.push("----------------------------------------------------------------------");
+    lines.push(title);
+    lines.push("[" + CAT[catKey].label + "]");
+    lines.push("");
+    lines.push("Description:");
+    lines.push(description || "(no description available)");
+    if (idsLine) { lines.push(""); lines.push(idsLine); }
+    lines.push("");
+    lines.push("Code found on the page:");
+    lines.push(code ? unescapeSnippet(code) : "(no inline snippet captured — detected via domain match only)");
+    lines.push("");
+  }
+
+  function fullCodeFor(r){
+    if (r.positions && r.positions.length && lastScanHtml) {
+      return collectSnippets(lastScanHtml, r.positions, { cap:false });
+    }
+    return r.snippet;
+  }
+
+  function buildPlainTextReport(results){
+    var marketing = results.filter(function(r){ return r.cat !== "platform"; });
+    var platform = results.filter(function(r){ return r.cat === "platform"; });
+    var lines = [];
+
+    lines.push("TAG TRACE — TRACKING CODE REPORT");
+    lines.push(marketing.length + " marketing tracking code" + (marketing.length === 1 ? "" : "s") + " detected" +
+      (platform.length ? ", plus " + platform.length + " platform/hosting script" + (platform.length === 1 ? "" : "s") + "." : "."));
+    lines.push("");
+
+    marketing.forEach(function(r){
+      if (r.type === "gtagFamily") {
+        var idsLine = "Destinations: " + r.destinations.map(function(d){ return d.catLabel + " (" + d.id + ")"; }).join(", ");
+        reportBlock(lines, r.name, r.cat, GTAG_FAMILY_CATALOG.description, idsLine, fullCodeFor(r));
+        return;
+      }
+      var vendor = VENDOR_BY_KEY[r.key];
+      var idsLine = r.ids.length ? "ID(s): " + r.ids.join(", ") : "";
+      reportBlock(lines, r.name, r.cat, vendor ? vendor.description : "", idsLine, fullCodeFor(r));
+    });
+
+    if (platform.length) {
+      lines.push("========================================================================");
+      lines.push("PLATFORM / HOSTING SCRIPTS — usually not something a marketer installed");
+      lines.push("========================================================================");
+      lines.push("");
+      platform.forEach(function(r){
+        var vendor = VENDOR_BY_KEY[r.key];
+        var desc = (vendor ? vendor.description + " " : "") + (r.note || "");
+        var idsLine = r.ids.length ? "ID(s): " + r.ids.join(", ") : "";
+        reportBlock(lines, r.name, r.cat, desc.trim(), idsLine, fullCodeFor(r));
+      });
+    }
+
+    return lines.join("\n");
+  }
+
+  function renderReport(){
+    if (!lastResults.length) {
+      reportBody.innerHTML = "";
+      lastReportText = "";
+      var empty = document.createElement("div");
+      empty.className = "empty-sub";
+      empty.style.padding = "24px 0";
+      empty.textContent = "Run a scan on the Scanner tab first — this tab turns those results into a plain-text report you can paste into a doc, ticket, or email.";
+      reportBody.appendChild(empty);
+      return;
+    }
+    lastReportText = buildPlainTextReport(lastResults);
+    reportBody.innerHTML = '<pre class="report-pre"></pre>';
+    reportBody.querySelector(".report-pre").textContent = lastReportText;
+  }
+
+  copyReportBtn.addEventListener("click", function(){
+    if (lastReportText) copyText(lastReportText); else showToast("Nothing to copy yet");
+  });
+
+  /* ---------------- Catalog view ---------------- */
+
+  var catalogSearch = document.getElementById("catalogSearch");
+  var catalogFilters = document.getElementById("catalogFilters");
+  var catalogGrid = document.getElementById("catalogGrid");
+  var catalogFilter = null;
+  var catalogQuery = "";
+
+  function catalogEntries(){
+    return VENDORS.concat([GTAG_FAMILY_CATALOG]);
+  }
+
+  function renderCatalogFilters(){
+    var counts = {};
+    catalogEntries().forEach(function(e){ counts[e.cat] = (counts[e.cat] || 0) + 1; });
+    var chips = ['<div class="chip" data-active="' + (catalogFilter===null) + '" data-key="all"><span class="dot" style="background:var(--ink-faint)"></span>All (' + catalogEntries().length + ')</div>'];
+    Object.keys(CAT).forEach(function(c){
+      if (!counts[c]) return;
+      chips.push(
+        '<div class="chip" data-active="' + (catalogFilter===c) + '" data-key="' + c + '">' +
+          '<span class="dot" style="background:' + CAT[c].color + '"></span>' + CAT[c].label + ' (' + counts[c] + ')' +
+        '</div>'
+      );
+    });
+    catalogFilters.innerHTML = chips.join("");
+    catalogFilters.querySelectorAll(".chip").forEach(function(el){
+      el.addEventListener("click", function(){
+        catalogFilter = el.getAttribute("data-key") === "all" ? null : el.getAttribute("data-key");
+        renderCatalog();
+      });
+    });
+  }
+
+  function renderCatalog(){
+    renderCatalogFilters();
+    var q = catalogQuery.trim().toLowerCase();
+    var entries = catalogEntries().filter(function(e){
+      if (catalogFilter && e.cat !== catalogFilter) return false;
+      if (!q) return true;
+      return (e.name + " " + e.description + " " + CAT[e.cat].label).toLowerCase().indexOf(q) !== -1;
+    });
+
+    if (!entries.length) {
+      catalogGrid.innerHTML = '<div class="empty-sub" style="padding:24px 0;">No trackers match your search.</div>';
+      return;
+    }
+
+    catalogGrid.innerHTML = entries.map(function(e){
+      var warn = e.status === "discontinued" ? '<span class="badge-warning">Discontinued</span>' : "";
+      var found = foundKeys[e.key] ? '<span class="found-badge">Found in scan</span>' : "";
+      var body = e.snippet
+        ? '<pre class="snippet-block" data-key="' + e.key + '"></pre>'
+        : '<div class="no-snippet-note" data-note="' + e.key + '"></div>';
+      var footer = e.snippet ? '<div class="catalog-footer"><button class="btn btn-sm" data-copy-key="' + e.key + '">Copy script</button></div>' : "";
+      return (
+        '<div class="catalog-card">' +
+          '<div class="catalog-top">' +
+            '<div class="card-top">' +
+              '<div class="mono-badge" style="background:' + CAT[e.cat].tint + '; color:' + CAT[e.cat].color + '">' + escapeHtml(e.mark) + '</div>' +
+              '<div class="card-title">' +
+                '<span class="card-name">' + escapeHtml(e.name) + warn + '</span>' +
+                '<span class="card-cat" style="background:' + CAT[e.cat].tint + '; color:' + CAT[e.cat].color + '">' + CAT[e.cat].label + '</span>' +
+              '</div>' +
+            '</div>' +
+            found +
+          '</div>' +
+          '<div class="catalog-desc" data-desc="' + e.key + '"></div>' +
+          body + footer +
+        '</div>'
+      );
+    }).join("");
+
+    entries.forEach(function(e){
+      var descEl = catalogGrid.querySelector('[data-desc="' + e.key + '"]');
+      if (descEl) descEl.textContent = e.description;
+      var snippetEl = catalogGrid.querySelector('pre[data-key="' + e.key + '"]');
+      if (snippetEl) snippetEl.textContent = e.snippet;
+      var noteEl = catalogGrid.querySelector('[data-note="' + e.key + '"]');
+      if (noteEl) noteEl.textContent = e.snippetNote || "No universal copy-paste snippet for this one — see the description above.";
+    });
+
+    catalogGrid.querySelectorAll("[data-copy-key]").forEach(function(btn){
+      btn.addEventListener("click", function(){
+        var key = btn.getAttribute("data-copy-key");
+        var entry = catalogEntries().find(function(e){ return e.key === key; });
+        if (entry && entry.snippet) copyText(entry.snippet);
+      });
+    });
+  }
+
+  catalogSearch.addEventListener("input", function(){ catalogQuery = catalogSearch.value; renderCatalog(); });
+})();
+</script>
+
+
