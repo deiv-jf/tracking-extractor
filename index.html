@@ -127,6 +127,17 @@
 
   /* ---------- plain text report ---------- */
   .report-pre{font-family:var(--mono); font-size:12.5px; line-height:1.6; color:var(--ink); white-space:pre-wrap; word-break:break-word; margin:0;}
+
+  /* ---------- wordpress snippet builder ---------- */
+  .wp-checklist{display:grid; grid-template-columns:repeat(auto-fill, minmax(260px,1fr)); gap:8px; margin-bottom:20px;}
+  .wp-check-row{display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:9px; border:1px solid var(--line); background:var(--surface); cursor:pointer;}
+  .wp-check-row:hover{border-color:var(--ink-faint);}
+  .wp-check-row input[type="checkbox"]{width:15px; height:15px; flex:none; accent-color:var(--accent);}
+  .wp-check-name{font-size:13px; font-weight:600; flex:1; min-width:0;}
+  .wp-check-loc{font-family:var(--mono); font-size:9.5px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:var(--ink-faint); flex:none;}
+  .wp-output-block{display:flex; flex-direction:column; gap:8px;}
+  .wp-output-head{display:flex; align-items:center; justify-content:space-between; gap:10px;}
+  #wpPhpOut{min-height:200px;}
 </style>
 
 <div class="wrap">
@@ -140,6 +151,7 @@
     <button class="tab-btn" data-active="true" data-tab="scanner">Scanner</button>
     <button class="tab-btn" data-active="false" data-tab="catalog">Tracker Catalog</button>
     <button class="tab-btn" data-active="false" data-tab="text">Plain Text</button>
+    <button class="tab-btn" data-active="false" data-tab="wp">WordPress Snippet</button>
   </div>
 
   <div id="scannerView">
@@ -194,6 +206,17 @@
       <div class="panel-body" id="reportBody"></div>
     </div>
   </div>
+
+  <div id="wpView" style="display:none;">
+    <div class="disclaimer-bar" style="margin-bottom:14px;">
+      Pick which of your <strong>last scan's</strong> detected trackers to bundle into one PHP snippet for WordPress (paste as a PHP snippet via WPCode or Code Snippets). It hooks into <code>wp_head</code>, <code>wp_body_open</code>, and <code>wp_footer</code> — WordPress's own equivalents of header/body/footer — and reuses the exact code and IDs found on the scanned page, not generic placeholders.
+    </div>
+    <div class="wp-checklist" id="wpChecklist"></div>
+    <div class="wp-output-block" id="wpOutputWrap" style="display:none;">
+      <div class="wp-output-head"><span class="panel-title">PHP snippet</span><button class="btn btn-sm" id="wpCopyBtn">Copy PHP snippet</button></div>
+      <pre class="snippet-block" id="wpPhpOut"></pre>
+    </div>
+  </div>
 </div>
 
 <div class="toast" id="toast">Copied</div>
@@ -215,12 +238,17 @@
     platform:  { label:"Platform / hosting (not a tag)",color:"#8A7F73", tint:"#EFEBE6" }
   };
 
+  var CATEGORY_LOCATION = {
+    tagmgr: "header", analytics: "header", ads: "header", cdp: "header", review: "header",
+    chat: "footer", session: "footer", leadintel: "footer"
+  };
+
   function re(pattern, flags){ return new RegExp(pattern, flags || "g"); }
   function withG(pattern){ return pattern.flags.indexOf("g") === -1 ? new RegExp(pattern.source, pattern.flags + "g") : pattern; }
 
   var VENDORS = [
     { key:"gtm", name:"Google Tag Manager", cat:"tagmgr", mark:"GTM",
-      patterns:[re("GTM-[A-Z0-9]{4,10}")],
+      patterns:[re("(GTM-[A-Z0-9]{4,10})")],
       description:"A container that lets you add and manage other tracking tags (Analytics, Ads, pixels) through a web interface, without editing site code for every new tag.",
       snippet:"<!-- Google Tag Manager -->\n<script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':\nnew Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],\nj=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=\n'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);\n})(window,document,'script','dataLayer','GTM-XXXXXXX');</" + "script>\n<!-- End Google Tag Manager -->\n\n<!-- put this right after the opening <body> tag -->\n<noscript><iframe src=\"https://www.googletagmanager.com/ns.html?id=GTM-XXXXXXX\"\nheight=\"0\" width=\"0\" style=\"display:none;visibility:hidden\"></iframe></noscript>" },
 
@@ -243,12 +271,12 @@
       snippet:"<script>\n(function(w,d,t,r,u){\n  var f,n,i;\n  w[u]=w[u]||[],f=function(){\n    var o={ti:\"XXXXXXXXX\", enableAutoSpaTracking:true};\n    o.q=w[u],w[u]=new UET(o),w[u].push(\"pageLoad\")\n  },\n  n=d.createElement(t),n.src=r,n.async=1,n.onload=n.onreadystatechange=function(){\n    var s=this.readyState;\n    s&&s!==\"loaded\"&&s!==\"complete\"||(f(),f=null)\n  },\n  i=d.getElementsByTagName(t)[0],i.parentNode.insertBefore(n,i)\n})(window,document,\"script\",\"//bat.bing.com/bat.js\",\"uetq\");\n</" + "script>" },
 
     { key:"fbpixel", name:"Meta (Facebook) Pixel", cat:"ads", mark:"FB",
-      patterns:[re("fbq\\(\\s*['\"]init['\"]\\s*,\\s*['\"](\\d+)['\"]"), re("connect\\.facebook\\.net")],
+      patterns:[re("fbq\\(\\s*['\"]init['\"]\\s*,\\s*['\"](\\d+)['\"]"), re("connect\\.facebook\\.net"), re("facebook\\.com/tr\\?id=(\\d+)")],
       description:"Tracks visits and conversions for Facebook and Instagram ad campaigns, and builds remarketing/lookalike audiences from your site visitors — the same pixel handles both remarketing and conversion tracking.",
       snippet:"<script>\n!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?\nn.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;\nn.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;\nt.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,\ndocument,'script','https://connect.facebook.net/en_US/fbevents.js');\nfbq('init', 'YOUR_PIXEL_ID');\nfbq('track', 'PageView');\n</" + "script>\n<noscript><img height=\"1\" width=\"1\" style=\"display:none\"\nsrc=\"https://www.facebook.com/tr?id=YOUR_PIXEL_ID&ev=PageView&noscript=1\"/></noscript>" },
 
     { key:"linkedin", name:"LinkedIn Insight Tag", cat:"ads", mark:"LI",
-      patterns:[re("_linkedin_partner_id\\s*=\\s*[\"']?(\\d+)"), re("snap\\.licdn\\.com")],
+      patterns:[re("_linkedin_partner_id\\s*=\\s*[\"']?(\\d+)"), re("snap\\.licdn\\.com"), re("px\\.ads\\.linkedin\\.com/collect")],
       description:"Tracks conversions from LinkedIn ad campaigns and builds retargeting audiences from site visitors — the same tag handles both remarketing and conversion tracking.",
       snippet:"<script type=\"text/javascript\">\n_linkedin_partner_id = \"YOUR_PARTNER_ID\";\nwindow._linkedin_data_partner_ids = window._linkedin_data_partner_ids || [];\nwindow._linkedin_data_partner_ids.push(_linkedin_partner_id);\n</" + "script>\n<script type=\"text/javascript\">\n(function(l){if(!l){window.lintrk=function(a,b){window.lintrk.q.push([a,b])};\nwindow.lintrk.q=[]}var s=document.getElementsByTagName(\"script\")[0];\nvar b=document.createElement(\"script\");b.type=\"text/javascript\";b.async=true;\nb.src=\"https://snap.licdn.com/li.lms-analytics/insight.min.js\";\ns.parentNode.insertBefore(b,s);})(window.lintrk);\n</" + "script>\n<noscript><img height=\"1\" width=\"1\" style=\"display:none;\" alt=\"\"\nsrc=\"https://px.ads.linkedin.com/collect/?pid=YOUR_PARTNER_ID&fmt=gif\" /></noscript>" },
 
@@ -388,7 +416,7 @@
       snippetNote:"HubSpot generates this per-account under Settings → Tracking & Analytics → Tracking code. Some accounts use a region-prefixed domain (e.g. js-na1.hs-scripts.com) instead." },
 
     { key:"marketo", name:"Marketo (Adobe)", cat:"cdp", mark:"MKT",
-      patterns:[re("munchkin\\.marketo\\.net")],
+      patterns:[re("munchkin\\.marketo\\.net"), re("Munchkin\\.init\\([\"']([A-Za-z0-9\\-]+)[\"']")],
       description:"Marketing automation platform tracking code, used for lead scoring and nurture campaigns.",
       snippet:"<script type=\"text/javascript\">\n(function() {\n  var didInit = false;\n  function initMunchkin() {\n    if (didInit === false) { didInit = true; Munchkin.init('YOUR_MUNCHKIN_ID'); }\n  }\n  var s = document.createElement('script');\n  s.async = true;\n  s.src = '//munchkin.marketo.net/munchkin.js';\n  s.onload = initMunchkin;\n  document.getElementsByTagName('head')[0].appendChild(s);\n})();\n</" + "script>" },
 
@@ -463,6 +491,13 @@
       var closeIdx = lower.indexOf(SCRIPT_CLOSE_TAG, scriptStart);
       if (closeIdx !== -1 && index < closeIdx) {
         return { start: scriptStart, end: closeIdx + SCRIPT_CLOSE_TAG.length };
+      }
+    }
+    var noscriptStart = lower.lastIndexOf("<noscript", index);
+    if (noscriptStart !== -1) {
+      var nsCloseIdx = lower.indexOf("</noscript>", noscriptStart);
+      if (nsCloseIdx !== -1 && index < nsCloseIdx) {
+        return { start: noscriptStart, end: nsCloseIdx + "</noscript>".length };
       }
     }
     var tagStart = html.lastIndexOf("<", index);
@@ -922,6 +957,7 @@
   var scannerView = document.getElementById("scannerView");
   var catalogView = document.getElementById("catalogView");
   var textView = document.getElementById("textView");
+  var wpView = document.getElementById("wpView");
   document.querySelectorAll(".tab-btn").forEach(function(btn){
     btn.addEventListener("click", function(){
       document.querySelectorAll(".tab-btn").forEach(function(b){ b.setAttribute("data-active", "false"); });
@@ -930,8 +966,10 @@
       scannerView.style.display = tab === "scanner" ? "" : "none";
       catalogView.style.display = tab === "catalog" ? "" : "none";
       textView.style.display = tab === "text" ? "" : "none";
+      wpView.style.display = tab === "wp" ? "" : "none";
       if (tab === "catalog") renderCatalog();
       if (tab === "text") renderReport();
+      if (tab === "wp") renderWpChecklist();
     });
   });
 
@@ -1110,6 +1148,111 @@
   }
 
   catalogSearch.addEventListener("input", function(){ catalogQuery = catalogSearch.value; renderCatalog(); });
+
+  /* ---------------- WordPress PHP snippet builder ---------------- */
+
+  var wpChecklist = document.getElementById("wpChecklist");
+  var wpOutputWrap = document.getElementById("wpOutputWrap");
+  var wpPhpOut = document.getElementById("wpPhpOut");
+  var wpCopyBtn = document.getElementById("wpCopyBtn");
+  var wpChecked = {};
+
+  function wpCandidates(){
+    return lastResults.filter(function(r){ return r.cat !== "platform" && r.cat !== "other" && r.positions && r.positions.length; });
+  }
+
+  function classifyBlocks(html, positions){
+    var seenStart = {};
+    var items = [];
+    positions.forEach(function(p){
+      var b = fullBlockBounds(html, p.index, p.len);
+      if (seenStart[b.start]) return;
+      seenStart[b.start] = true;
+      items.push({ start:b.start, text: html.slice(b.start, b.end) });
+    });
+    items.sort(function(a, b){ return a.start - b.start; });
+    var header = [], body = [];
+    items.forEach(function(i){ (/<noscript/i.test(i.text) ? body : header).push(i.text); });
+    return { header:header, body:body };
+  }
+
+  function wpLocationFor(r){
+    return r.type === "gtagFamily" ? "header" : (CATEGORY_LOCATION[r.cat] || "header");
+  }
+
+  function renderWpChecklist(){
+    var candidates = wpCandidates();
+
+    if (!candidates.length) {
+      wpChecklist.innerHTML = '<div class="empty-sub" style="padding:24px 0;">No trackers with a copyable code block in your last scan. Run a scan on the Scanner tab first.</div>';
+      wpOutputWrap.style.display = "none";
+      return;
+    }
+
+    candidates.forEach(function(r){ if (!(r.key in wpChecked)) wpChecked[r.key] = true; });
+
+    wpChecklist.innerHTML = candidates.map(function(r){
+      var loc = wpLocationFor(r);
+      return (
+        '<label class="wp-check-row">' +
+          '<input type="checkbox" data-wp-key="' + r.key + '"' + (wpChecked[r.key] ? " checked" : "") + '>' +
+          '<span class="wp-check-name">' + escapeHtml(r.name) + '</span>' +
+          '<span class="wp-check-loc" style="color:' + CAT[r.cat].color + '">' + loc + '</span>' +
+        '</label>'
+      );
+    }).join("");
+
+    wpChecklist.querySelectorAll("input[type=checkbox]").forEach(function(cb){
+      cb.addEventListener("change", function(){
+        wpChecked[cb.getAttribute("data-wp-key")] = cb.checked;
+        renderWpOutput();
+      });
+    });
+
+    wpOutputWrap.style.display = "";
+    renderWpOutput();
+  }
+
+  function renderWpOutput(){
+    var candidates = wpCandidates().filter(function(r){ return wpChecked[r.key]; });
+    var buckets = { header: [], body: [], footer: [] };
+
+    candidates.forEach(function(r){
+      var blocks = classifyBlocks(lastScanHtml, r.positions);
+      var loc = wpLocationFor(r);
+      if (blocks.header.length) buckets[loc].push("// " + r.name + "\n" + blocks.header.join("\n\n"));
+      if (blocks.body.length) buckets.body.push("// " + r.name + " (noscript)\n" + blocks.body.join("\n\n"));
+    });
+
+    var lines = [
+      "<?php",
+      "/**",
+      " * Tag Trace — WordPress tracking snippet",
+      " * Generated from a live scan. Add as a PHP snippet (WPCode / Code Snippets).",
+      " */",
+      ""
+    ];
+
+    var hooks = [
+      { action:"wp_head", parts:buckets.header },
+      { action:"wp_body_open", parts:buckets.body },
+      { action:"wp_footer", parts:buckets.footer }
+    ];
+
+    var any = false;
+    hooks.forEach(function(h){
+      if (!h.parts.length) return;
+      any = true;
+      lines.push("add_action('" + h.action + "', function () { ?>");
+      lines.push(h.parts.join("\n\n"));
+      lines.push("<?php });");
+      lines.push("");
+    });
+
+    wpPhpOut.textContent = any ? lines.join("\n").trim() : "Check at least one tracker above to generate the PHP snippet.";
+  }
+
+  wpCopyBtn.addEventListener("click", function(){ copyText(wpPhpOut.textContent); });
 })();
 </script>
 
