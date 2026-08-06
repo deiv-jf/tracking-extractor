@@ -138,6 +138,17 @@
   .wp-output-block{display:flex; flex-direction:column; gap:8px;}
   .wp-output-head{display:flex; align-items:center; justify-content:space-between; gap:10px;}
   #wpPhpOut{min-height:200px;}
+
+  /* ---------- sheet snippet ---------- */
+  .sheet-table-wrap{overflow-x:auto; border:1px solid var(--line); border-radius:12px; background:var(--surface);}
+  .sheet-table{width:100%; border-collapse:collapse; font-size:13px;}
+  .sheet-table th{text-align:left; font-family:var(--mono); font-size:10.5px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; color:var(--ink-soft); background:var(--surface-2); padding:10px 14px; border-bottom:1px solid var(--line); white-space:nowrap;}
+  .sheet-table td{padding:12px 14px; border-bottom:1px solid var(--line-soft); vertical-align:top;}
+  .sheet-table tr:last-child td{border-bottom:none;}
+  .sheet-table td.sheet-title{font-weight:700; white-space:nowrap;}
+  .sheet-table td.sheet-desc{color:var(--ink-soft); font-size:12.5px; line-height:1.5; max-width:320px;}
+  .sheet-table td.sheet-code{max-width:420px;}
+  .sheet-table td.sheet-code pre{font-family:var(--mono); font-size:11px; line-height:1.5; white-space:pre; overflow-x:auto; max-height:160px; overflow-y:auto; margin:0; background:var(--surface-2); border:1px solid var(--line-soft); border-radius:6px; padding:8px 10px; color:var(--ink-soft);}
 </style>
 
 <div class="wrap">
@@ -152,6 +163,7 @@
     <button class="tab-btn" data-active="false" data-tab="catalog">Tracker Catalog</button>
     <button class="tab-btn" data-active="false" data-tab="text">Plain Text</button>
     <button class="tab-btn" data-active="false" data-tab="wp">WordPress Snippet</button>
+    <button class="tab-btn" data-active="false" data-tab="sheet">Sheet Snippet</button>
   </div>
 
   <div id="scannerView">
@@ -215,6 +227,21 @@
     <div class="wp-output-block" id="wpOutputWrap" style="display:none;">
       <div class="wp-output-head"><span class="panel-title">PHP snippet</span><button class="btn btn-sm" id="wpCopyBtn">Copy PHP snippet</button></div>
       <pre class="snippet-block" id="wpPhpOut"></pre>
+    </div>
+  </div>
+
+  <div id="sheetView" style="display:none;">
+    <div class="disclaimer-bar" style="margin-bottom:14px;">
+      A table of everything from your <strong>last scan</strong> — title, description, and the exact code found — ready to paste straight into Google Sheets or Excel as three columns.
+    </div>
+    <div class="toolbar" style="margin-bottom:14px; justify-content:flex-end;">
+      <button class="btn btn-sm" id="sheetCopyBtn">Copy for Sheets/Excel</button>
+    </div>
+    <div class="sheet-table-wrap">
+      <table class="sheet-table" id="sheetTable">
+        <thead><tr><th>Title</th><th>Description</th><th>Code</th></tr></thead>
+        <tbody id="sheetTableBody"></tbody>
+      </table>
     </div>
   </div>
 </div>
@@ -958,6 +985,7 @@
   var catalogView = document.getElementById("catalogView");
   var textView = document.getElementById("textView");
   var wpView = document.getElementById("wpView");
+  var sheetView = document.getElementById("sheetView");
   document.querySelectorAll(".tab-btn").forEach(function(btn){
     btn.addEventListener("click", function(){
       document.querySelectorAll(".tab-btn").forEach(function(b){ b.setAttribute("data-active", "false"); });
@@ -967,9 +995,11 @@
       catalogView.style.display = tab === "catalog" ? "" : "none";
       textView.style.display = tab === "text" ? "" : "none";
       wpView.style.display = tab === "wp" ? "" : "none";
+      sheetView.style.display = tab === "sheet" ? "" : "none";
       if (tab === "catalog") renderCatalog();
       if (tab === "text") renderReport();
       if (tab === "wp") renderWpChecklist();
+      if (tab === "sheet") renderSheet();
     });
   });
 
@@ -1253,6 +1283,68 @@
   }
 
   wpCopyBtn.addEventListener("click", function(){ copyText(wpPhpOut.textContent); });
+
+  /* ---------------- Sheet snippet ---------------- */
+
+  var sheetTableBody = document.getElementById("sheetTableBody");
+  var sheetCopyBtn = document.getElementById("sheetCopyBtn");
+  var lastSheetRows = [];
+
+  function describeResult(r){
+    if (r.type === "gtagFamily") return { title:r.name, description:GTAG_FAMILY_CATALOG.description };
+    var vendor = VENDOR_BY_KEY[r.key];
+    var desc = vendor ? vendor.description : "";
+    if (r.cat === "platform" && r.note) desc = (desc ? desc + " " : "") + r.note;
+    return { title:r.name, description:desc };
+  }
+
+  function renderSheet(){
+    if (!lastResults.length) {
+      sheetTableBody.innerHTML = '<tr><td colspan="3" class="empty-sub" style="padding:24px 0;">Run a scan on the Scanner tab first — this tab turns those results into a table you can paste into Sheets or Excel.</td></tr>';
+      lastSheetRows = [];
+      return;
+    }
+
+    lastSheetRows = lastResults.map(function(r){
+      var info = describeResult(r);
+      var code = fullCodeFor(r);
+      return {
+        title: info.title,
+        description: info.description || "",
+        code: code ? unescapeSnippet(code) : "(no inline snippet captured — detected via domain match only)"
+      };
+    });
+
+    sheetTableBody.innerHTML = lastSheetRows.map(function(){
+      return '<tr><td class="sheet-title"></td><td class="sheet-desc"></td><td class="sheet-code"><pre></pre></td></tr>';
+    }).join("");
+
+    var rows = sheetTableBody.querySelectorAll("tr");
+    rows.forEach(function(tr, i){
+      tr.children[0].textContent = lastSheetRows[i].title;
+      tr.children[1].textContent = lastSheetRows[i].description;
+      tr.children[2].querySelector("pre").textContent = lastSheetRows[i].code;
+    });
+  }
+
+  function csvField(s){
+    s = String(s == null ? "" : s);
+    if (/["\t\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+    return s;
+  }
+
+  function buildTsv(rows){
+    var lines = ["Title\tDescription\tCode"];
+    rows.forEach(function(r){
+      lines.push([csvField(r.title), csvField(r.description), csvField(r.code)].join("\t"));
+    });
+    return lines.join("\n");
+  }
+
+  sheetCopyBtn.addEventListener("click", function(){
+    if (!lastSheetRows.length) { showToast("Nothing to copy yet"); return; }
+    copyText(buildTsv(lastSheetRows));
+  });
 })();
 </script>
 
