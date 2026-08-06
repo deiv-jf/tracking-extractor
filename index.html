@@ -732,10 +732,30 @@
     showToast._t = setTimeout(function(){ toast.setAttribute("data-show", "false"); }, 1400);
   }
 
+  function legacyCopy(text){
+    var ok = false;
+    try {
+      var ta = document.createElement("textarea");
+      ta.value = text;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "fixed";
+      ta.style.top = "-1000px";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      ok = document.execCommand("copy");
+      document.body.removeChild(ta);
+    } catch (e) { ok = false; }
+    showToast(ok ? "Copied" : "Couldn't copy — select the text and copy manually");
+  }
+
   function copyText(text){
     if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text).then(function(){ showToast("Copied"); });
-    } else { showToast("Copy not supported"); }
+      navigator.clipboard.writeText(text).then(function(){ showToast("Copied"); }, function(){ legacyCopy(text); });
+    } else {
+      legacyCopy(text);
+    }
   }
 
   function renderEmpty(hasScanned){
